@@ -32,37 +32,38 @@ import de.uni_freiburg.informatik.ultimate.logic.TermTransformer;
 public class SymbolCollector extends TermTransformer {
 
 	private HashMap<FunctionSymbol, Integer> mSymbols;
-	
+
 	/**
-	 * Collect all symbols occurring in a given formula.  Do not use the
-	 * {@link TermTransformer#transform(Term)} method on this class. 
-	 * @param input The given formula.
+	 * Collect all symbols occurring in a given formula. Do not use the {@link TermTransformer#transform(Term)} method
+	 * on this class.
+	 * 
+	 * @param input
+	 *            The given formula.
 	 */
 	public final Map<FunctionSymbol, Integer> collect(Term input) {
-		final Map<FunctionSymbol, Integer> res = mSymbols = 
-			new HashMap<FunctionSymbol, Integer>();
+		final Map<FunctionSymbol, Integer> res = mSymbols = new HashMap<FunctionSymbol, Integer>();
 		final FormulaUnLet unletter = new FormulaUnLet(UnletType.EXPAND_DEFINITIONS);
 		final Term t = unletter.unlet(input);
 		transform(t);
 		mSymbols = null;
 		return res;
 	}
-	
+
 	public void startCollectTheory() {
 		mSymbols = new HashMap<FunctionSymbol, Integer>();
 	}
-	
+
 	public Set<FunctionSymbol> getTheorySymbols() {
 		final Set<FunctionSymbol> res = mSymbols.keySet();
 		mSymbols = null;
 		return res;
 	}
-	
+
 	public void addGlobalSymbols(Term input) {
 		assert mSymbols != null : "call startCollectTheory() first";
 		transform(input);
 	}
-	
+
 	@Override
 	public void convertApplicationTerm(ApplicationTerm appTerm, Term[] newArgs) {
 		final FunctionSymbol fs = appTerm.getFunction();

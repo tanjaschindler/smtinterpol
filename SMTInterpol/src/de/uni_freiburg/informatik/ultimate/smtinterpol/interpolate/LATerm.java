@@ -42,7 +42,7 @@ public class LATerm extends Term {
 					final InfinitNumber cdiff = c.ceil().add(c.negate());
 					s.add(cdiff);
 					// -k <= s iff -k+cdiff <= s + cdiff
-					//         iff ceil(-k+cdiff) <= s + cdiff
+					// iff ceil(-k+cdiff) <= s + cdiff
 					// -ceil(-k+cdiff) = floor(k-cdiff)
 					k = k.add(cdiff.negate()).floor();
 				}
@@ -52,11 +52,11 @@ public class LATerm extends Term {
 		mK = k;
 		mF = F;
 	}
-	
+
 	InterpolatorAffineTerm mS;
 	InfinitNumber mK;
 	Term mF;
-	
+
 	@Override
 	public Sort getSort() {
 		return mF.getSort();

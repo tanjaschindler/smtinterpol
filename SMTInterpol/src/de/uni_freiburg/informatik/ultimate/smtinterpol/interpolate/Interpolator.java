@@ -105,7 +105,9 @@ public class Interpolator extends NonRecursive {
 	/**
 	 * This class goes through the proof terms of the proof tree for the input clause. It checks if the interpolant for
 	 * a term already exists, and if not, it enqueues new walkers depending on the node type.
-	 * @param proofTerm the proof term to interpolate
+	 * 
+	 * @param proofTerm
+	 *            the proof term to interpolate
 	 */
 	public static class ProofTreeWalker implements Walker {
 		private final Term mProofTerm;
@@ -132,7 +134,9 @@ public class Interpolator extends NonRecursive {
 	/**
 	 * This class combines the interpolants preceding a resolution step and adds the interpolant of the resolvent to the
 	 * Interpolated stack.
-	 * @param the pivot of the resolution step
+	 * 
+	 * @param the
+	 *            pivot of the resolution step
 	 */
 	public static class CombineInterpolants implements Walker {
 		private final Term mPivot;
@@ -217,7 +221,9 @@ public class Interpolator extends NonRecursive {
 
 	/**
 	 * Enqueue walkers for the single steps in a hyper-resolution step.
-	 * @param clause the resolvent clause
+	 * 
+	 * @param clause
+	 *            the resolvent clause
 	 */
 	private void walkResolutionNode(Term proofTerm) {
 		if (mSmtSolver.isTerminationRequested()) {
@@ -628,7 +634,11 @@ public class Interpolator extends NonRecursive {
 						}
 						mCheckingSolver.assertTerm(mTheory.term("=", lhs, rhs));
 					} else {
-						mCheckingSolver.assertTerm(mTheory.term(litTermInfo.isNegated() ? "distinct" : "=", lhs, rhs));
+						if (litTermInfo.isNegated()) {
+							mCheckingSolver.assertTerm(mTheory.not(mTheory.equals(lhs, rhs)));
+						} else {
+							mCheckingSolver.assertTerm(mTheory.equals(lhs, rhs)) ;
+						}
 					}
 				} else if (litTermInfo.isLAEquality()) {
 					// handle mixed LA disequalities.
@@ -734,9 +744,13 @@ public class Interpolator extends NonRecursive {
 	/**
 	 * Compute the interpolant for a Nelson-Oppen equality clause. This is a theory lemma of the form equality implies
 	 * equality, where one equality is congruence closure and one is linear arithmetic.
-	 * @param ccEq the congruence closure equality atom
-	 * @param laEq the linear arithmetic equality atom
-	 * @param sign the sign of l1 in the conflict clause. This is -1 if l1 implies l2, and +1 if l2 implies l1.
+	 * 
+	 * @param ccEq
+	 *            the congruence closure equality atom
+	 * @param laEq
+	 *            the linear arithmetic equality atom
+	 * @param sign
+	 *            the sign of l1 in the conflict clause. This is -1 if l1 implies l2, and +1 if l2 implies l1.
 	 */
 	private Interpolant[] computeEQInterpolant(Term eqLemma) {
 		Interpolant[] interpolants = null;
