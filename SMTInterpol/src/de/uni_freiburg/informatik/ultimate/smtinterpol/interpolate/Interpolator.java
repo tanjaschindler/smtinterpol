@@ -280,6 +280,10 @@ public class Interpolator extends NonRecursive {
 				for (int j = 0; j < mNumInterpolants; j++) {
 					interpolants[j] = new Interpolant(interpolantTerms[j]);
 				}
+			// TEST FOR THE NEW LRA INTERPOLATION TODO Include an option to choose if the user wants to use this method
+			} else if (leafTermInfo.getLemmaType().equals(":LA") && mTheory.getLogic().name().equals("QF_LRA")) {
+				final LRAInterpolatorWithCR ipolator = new LRAInterpolatorWithCR(this);
+				interpolants = ipolator.computeInterpolants(leaf);
 			} else if (leafTermInfo.getLemmaType().equals(":LA") || leafTermInfo.getLemmaType().equals(":trichotomy")) {
 				final LAInterpolator ipolator = new LAInterpolator(this);
 				interpolants = ipolator.computeInterpolants(leaf);
