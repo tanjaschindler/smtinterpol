@@ -20,6 +20,7 @@
 package de.uni_freiburg.informatik.ultimate.smtinterpol.interpolate;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -36,7 +37,6 @@ import de.uni_freiburg.informatik.ultimate.logic.Theory;
 import de.uni_freiburg.informatik.ultimate.smtinterpol.interpolate.Interpolator.LitInfo;
 import de.uni_freiburg.informatik.ultimate.smtinterpol.interpolate.Interpolator.Occurrence;
 import de.uni_freiburg.informatik.ultimate.smtinterpol.theory.linar.InfinitNumber;
-import de.uni_freiburg.informatik.ultimate.smtinterpol.util.SymmetricPair;
 
 /**
  * An alternative Interpolator for pure linear arithmetic over the reals. No support of theory combination for now.
@@ -58,6 +58,8 @@ public class LRAInterpolatorWithCR {
 
 	Term[] mFarkasInterpolants;
 	Set<Term>[] mInitialAConstraints;
+	Vector<Term>[] mOrderedVars;
+	int[] mFirstAVar;
 
 	@SuppressWarnings("unchecked")
 	public LRAInterpolatorWithCR(Interpolator interpolator) {
@@ -67,12 +69,15 @@ public class LRAInterpolatorWithCR {
 		mInterpolants = new Set[interpolator.mNumInterpolants];
 		mOldInterpolants = new Interpolant[interpolator.mNumInterpolants];
 		mInitialAConstraints = new Set[interpolator.mNumInterpolants];
+		mOrderedVars = new Vector[interpolator.mNumInterpolants];
 		for (int i = 0; i < interpolator.mNumInterpolants; i++) {
 			mInterpolants[i] = new HashSet<Term>();
 			mOldInterpolants[i] = new Interpolant();
 			mInitialAConstraints[i] = new HashSet<Term>();
+			mOrderedVars[i] = new Vector<Term>();
 		}
 		mFarkasInterpolants = new Term[interpolator.mNumInterpolants];
+		mFirstAVar = new int[interpolator.mNumInterpolants];
 	}
 
 	/**
@@ -125,7 +130,7 @@ public class LRAInterpolatorWithCR {
 		 * the inequalities to get the aux literal. The equality will remember the equality literal and equalityInfo
 		 * will remember its info.
 		 */
-//		Term equality = null;
+		// Term equality = null;
 		LitInfo equalityInfo = null;
 		Interpolator.Occurrence inequalityInfo = null;
 
@@ -318,8 +323,8 @@ public class LRAInterpolatorWithCR {
 				continue;
 			}
 			// Else, generate the CR-based interpolant.
-			final Vector<Term> variables = computeVariableOrder(constraints[color], color);
-			ConflictResolutionEngine crEngine = new ConflictResolutionEngine(variables);
+			computeVariableOrder(constraints[color], color);
+			ConflictResolutionEngine crEngine = new ConflictResolutionEngine(mOrderedVars[color]);
 			// Add all A constraints collected in the Farkas part
 			for (Term constraint : constraints[color]) {
 				final Term normalizedConstraint = crEngine.addConstraint(constraint);
@@ -328,11 +333,7 @@ public class LRAInterpolatorWithCR {
 			// Add the negated Farkas interpolant
 			crEngine.addConstraint(mTheory.not(mFarkasInterpolants[color]));
 			// CR algorithm
-			Map<Term, SymmetricPair<Term>> conflicts = crEngine.run();
-			Map<Term, Integer> constraintsWithLevel = crEngine.getConstraints();
-			// Collect interpolant
-			Set<Term> itpConjuncts = computeInterpolantConjuncts(variables, conflicts, constraintsWithLevel, color);
-			// Build the interpolant for this partition.
+			Set<Term> itpConjuncts = crEngine.run(color);
 			crInterpolants[color] = mTheory.and(itpConjuncts.toArray(new Term[itpConjuncts.size()]));
 		}
 		return crInterpolants;
@@ -340,7 +341,7 @@ public class LRAInterpolatorWithCR {
 
 	/**
 	 * Order the variables occurring in the constraints for partition color such that x_0 < ... < x_i are shared and
-	 * x_{i+1} < ... < x_n are A-local
+	 * x_{i+1} < ... < x_n are A-local.
 	 * 
 	 * @param constraints
 	 *            a set of LRA constraints over shared and A-local variables
@@ -348,75 +349,313 @@ public class LRAInterpolatorWithCR {
 	 *            the interpolation partition
 	 * @return the ordered variables in a vector of terms
 	 */
-	private Vector<Term> computeVariableOrder(Set<Term> constraints, int color) {
-		Vector<Term> variables = new Vector<Term>();
+	private void computeVariableOrder(Set<Term> constraints, int color) {
+		Vector<Term> aLocalVars = new Vector<Term>();
+		Vector<Term> sharedVars = new Vector<Term>();
+		Set<Term> processedVars = new HashSet<Term>();
+		// Group all variables into A-local and shared variables
 		for (Term constraint : constraints) {
 			final InterpolatorLiteralTermInfo info = mInterpolator.getLiteralTermInfo(constraint);
 			final InterpolatorAffineTerm linVar = info.getLinVar();
 			for (Term var : linVar.getSummands().keySet()) {
-				if (!variables.contains(var)) {
+				if (!processedVars.contains(var)) {
 					final Occurrence occur = mInterpolator.getOccurrence(var, null);
 					assert occur.isAorShared(color);
 					if (occur.isAB(color)) {
-						variables.add(0, var);
+						sharedVars.add(var);
 					} else {
-						variables.add(var);
+						aLocalVars.add(var);
 					}
+					processedVars.add(var);
 				}
 			}
 		}
-		return variables;
+		// Sort both vectors lexicographically
+		Collections.sort(aLocalVars, (a, b) -> a.toString().compareTo(b.toString()));
+		Collections.sort(sharedVars, (a, b) -> a.toString().compareTo(b.toString()));
+		mFirstAVar[color] = sharedVars.size();
+		Vector<Term> orderedVariables = sharedVars;
+		for (int i = 0; i < aLocalVars.size(); i++) {
+			orderedVariables.add(aLocalVars.get(i));
+		}
+		mOrderedVars[color] = orderedVariables;
 	}
 
+	/* CONFLICT RESOLUTION */
+
 	/**
-	 * Compute the conjuncts for the interpolant: - constraints from the A part of the original problem over shared
-	 * variables only, that are used in CR and - resolvents containing only shared variables whose parents contain
-	 * A-local variables.
-	 * 
-	 * @param variables
-	 *            The variables ordered from shared to A-local
-	 * @param conflicts
-	 *            The conflicts from the CR algorithm
-	 * @param color
-	 *            The partition
-	 * @return The interpolant conjuncts for this partition
+	 * The conflict resolution engine. Given constraints and an order on the occurring variables, this class contains
+	 * all the data structures and methods needed for conflict resolution.
 	 */
-	private Set<Term> computeInterpolantConjuncts(Vector<Term> variables, Map<Term, SymmetricPair<Term>> conflicts,
-			Map<Term, Integer> constraintsWithLevel, int color) {
-		// Compute first A-local variable (if there is one)
-		int firstA = variables.size();
-		for (int i = 0; i < variables.size(); i++) {
-			final Occurrence occur = mInterpolator.getOccurrence(variables.get(i), null);
-			if (occur.isALocal(color)) {
-				firstA = i;
-				break;
+	class ConflictResolutionEngine {
+		/**
+		 * The ordered variables (ascending).
+		 */
+		Vector<Term> mOrderedVars;
+		/**
+		 * A map from the constraint Terms to the corresponding InterpolatorAffineTerms for easy access to the summands.
+		 * It is used for the initial and learned constraints.
+		 */
+		Map<Term, InterpolatorAffineTerm> mConstraints;
+
+		CRLevelInfo[] mLevelInfo;
+
+		public ConflictResolutionEngine(Vector<Term> variables) {
+			mOrderedVars = variables;
+			mConstraints = new HashMap<Term, InterpolatorAffineTerm>();
+			mLevelInfo = new CRLevelInfo[variables.size()];
+			for (int k = 0; k < variables.size(); k++) {
+				mLevelInfo[k] = new CRLevelInfo();
 			}
 		}
-		// Filter the constraints for the interpolant.
-		Set<Term> itpConjuncts = new HashSet<Term>();
-		for (Map.Entry<Term, SymmetricPair<Term>> conflict : conflicts.entrySet()) {
-			final Term resolvent = conflict.getKey();
-			final Term parent = conflict.getValue().getFirst();
-			final Term otherParent = conflict.getValue().getSecond();
-			// Add constraints from the original problem if they appear in a conflict and contain shared variables only.
-			if (mInitialAConstraints[color].contains(parent)) {
-				if (constraintsWithLevel.get(parent) < firstA) {
-					itpConjuncts.add(parent);
+
+		/**
+		 * Add constraints to the CR engine
+		 * 
+		 * @param constraint
+		 *            a constraint over the given variables
+		 * @return the normalized initial constraints
+		 */
+		private Term addConstraint(Term constraint) {
+			// TODO When dealing with = and !=, this should create a pair of constraints
+			InterpolatorAffineTerm constraintLHS = computeLHSForLeq0(constraint);
+			final int k = computeLevel(constraintLHS);
+			final Term xk = mOrderedVars.get(k);
+			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, xk);
+			final Term normalConstraint = buildTermLeq0(normalLHS);
+			// Add the normalized constraints to the data structures for the CR engine
+			mConstraints.put(normalConstraint, normalLHS);
+			mLevelInfo[k].mConstraints.add(normalConstraint);
+			return normalConstraint;
+		}
+
+		/**
+		 * Run the CR algorithm given a set of constraints and an order on the occurring variables.
+		 * 
+		 * @return The set of conflicts that have been detected during the run. (Note that it does not contain the
+		 *         conlict with resolvent \bot)
+		 */
+		private Set<Term> run(int color) {
+			Set<Term> itpConjuncts = new HashSet<Term>();
+			boolean done = false;
+			for (int k = 0; !done && k < mOrderedVars.size(); k++) {
+				recalculateBounds(k);
+				if (!isInConflict(k)) {
+					updateAssignment(k);
+				} else {
+					while (!done && isInConflict(k)) {
+						final InterpolatorAffineTerm resLHS = resolveConflict(k); // (CR)
+						final int parentK = k;
+						k = computeLevel(resLHS); // k := the level of the resolvent. It is -1 if no variable occurs.
+						if (k != -1) {
+							final Term resolvent = addLearnedConstraint(resLHS, k);
+							updateBounds(k, resolvent);
+							addInterpolantConjuncts(itpConjuncts, parentK, k, resolvent, color);
+						} else { // if k = -1 then we are done
+							done = true;
+						}
+					}
+					if (!done) {
+						updateAssignment(k); // xk->v, where v is a value satisfying all constraints of level <= k (AR)
+					}
+
 				}
 			}
-			if (mInitialAConstraints[color].contains(otherParent)) {
-				if (constraintsWithLevel.get(otherParent) < firstA) {
+			return itpConjuncts;
+		}
+
+		/* Main steps in the CR algorithm */
+		/**
+		 * Recalculate the bounds for a variable using all constraints of the level.
+		 */
+		private void recalculateBounds(int k) {
+			// Reset bounds
+			mLevelInfo[k].mLowerBound = InfinitNumber.NEGATIVE_INFINITY;
+			mLevelInfo[k].mUpperBound = InfinitNumber.POSITIVE_INFINITY;
+			// Recalculate using all constraints
+			for (Term constraint : mLevelInfo[k].mConstraints) {
+				updateBounds(k, constraint);
+			}
+		}
+
+		/**
+		 * Update the bounds for a variable using one constraint.
+		 */
+		private void updateBounds(int k, Term constraint) {
+			final Term xk = mOrderedVars.get(k);
+			final InterpolatorAffineTerm constraintLHS = mConstraints.get(constraint);
+			final Rational factor = constraintLHS.getSummands().get(xk);
+			final InterpolatorAffineTerm lhsWithoutXk =
+					new InterpolatorAffineTerm(constraintLHS).add(factor.negate(), xk);
+			InfinitNumber bound = evaluateTerm(lhsWithoutXk);
+			if (factor.isNegative()) {
+				if (!bound.lesseq(mLevelInfo[k].mLowerBound)) {
+					mLevelInfo[k].mLowerBound = bound;
+					mLevelInfo[k].mLBConstraint = constraint;
+				}
+			} else {
+				bound = bound.negate();
+				if (bound.less(mLevelInfo[k].mUpperBound)) {
+					mLevelInfo[k].mUpperBound = bound;
+					mLevelInfo[k].mUBConstraint = constraint;
+				}
+			}
+		}
+
+		/**
+		 * Check if there is a conflict, i.e. if a variable's lower bound is greater than its upper bound.
+		 */
+		private boolean isInConflict(int k) {
+			return mLevelInfo[k].mUpperBound.less(mLevelInfo[k].mLowerBound);
+		}
+
+		/**
+		 * Try to find a conflict in this level.
+		 * 
+		 * @return the resolvent's lhs
+		 */
+		private InterpolatorAffineTerm resolveConflict(int k) {
+			final Term lowerConstraint = mLevelInfo[k].mLBConstraint;
+			final Term upperConstraint = mLevelInfo[k].mUBConstraint;
+			final InterpolatorAffineTerm lowerLHS = mConstraints.get(lowerConstraint);
+			final InterpolatorAffineTerm upperLHS = mConstraints.get(upperConstraint);
+			final InterpolatorAffineTerm resolventLHS =
+					new InterpolatorAffineTerm(lowerLHS).add(Rational.ONE, upperLHS);
+			return resolventLHS;
+		}
+
+		/**
+		 * Compute the level of a constraint.
+		 * 
+		 * @param lhs
+		 *            The lhs of a constraint of form <code>term <= 0</code>
+		 * @return The number of the top variable, or -1 if the lhs is a constant
+		 */
+		private int computeLevel(InterpolatorAffineTerm lhs) {
+			if (lhs.getSummands().isEmpty()) {
+				return -1;
+			} else {
+				int level = 0;
+				for (Term xk : lhs.getSummands().keySet()) {
+					final int k = mOrderedVars.indexOf(xk);
+					if (k > level) {
+						level = k;
+					}
+				}
+				return level;
+			}
+		}
+
+		/**
+		 * Update the assignment for variable x_k by a value such that all constraints of level k are satisfied.
+		 */
+		private void updateAssignment(int k) {
+			final InfinitNumber lowerBound = mLevelInfo[k].mLowerBound;
+			final InfinitNumber upperBound = mLevelInfo[k].mUpperBound;
+			if (lowerBound.equals(InfinitNumber.NEGATIVE_INFINITY)
+					&& upperBound.equals(InfinitNumber.POSITIVE_INFINITY)) {
+				mLevelInfo[k].mVarAssignment = Rational.ZERO;
+			} else if (lowerBound.equals(InfinitNumber.NEGATIVE_INFINITY)) {
+				mLevelInfo[k].mVarAssignment = upperBound.mA.sub(Rational.ONE);
+			} else if (upperBound.equals(InfinitNumber.POSITIVE_INFINITY)) {
+				mLevelInfo[k].mVarAssignment = lowerBound.mA.add(Rational.ONE);
+			} else {
+				mLevelInfo[k].mVarAssignment = upperBound.mA.add(lowerBound.mA).div(Rational.TWO);
+			}
+		}
+
+		/**
+		 * Add constraints of a conflict to the set of interpolant conjuncts, if (1) they are initial constraints over
+		 * shared variables only, or (2) they are resolvents of constraints containing A-local variables, but contain
+		 * only shared variables themselves.
+		 */
+		private void addInterpolantConjuncts(Set<Term> itpConjuncts, int parentLevel, int resLevel, Term resolvent,
+				int color) {
+			// Add initial constraints over shared variables if they occur in a conflict
+			final Term parent = mLevelInfo[parentLevel].mLBConstraint;
+			final Term otherParent = mLevelInfo[parentLevel].mUBConstraint;
+			if (parentLevel < mFirstAVar[color]) {
+				if (mInitialAConstraints[color].contains(parent)) {
+					itpConjuncts.add(parent);
+				}
+				if (mInitialAConstraints[color].contains(otherParent)) {
 					itpConjuncts.add(otherParent);
 				}
 			}
 			// Add constraints over shared variables if they are resolvents of constraints with A-local variables.
-			if (constraintsWithLevel.get(resolvent) < firstA) {
-				if (constraintsWithLevel.get(parent) >= firstA && constraintsWithLevel.get(otherParent) >= firstA) {
+			if (resLevel < mFirstAVar[color]) {
+				if (parentLevel >= mFirstAVar[color]) {
 					itpConjuncts.add(resolvent);
 				}
 			}
 		}
-		return itpConjuncts;
+
+		/* Helpers */
+		/**
+		 * Store all the information about a level needed for the CR algorithm. This is: (1) the constraints of this
+		 * level, (2) the current assignment of the top variable, (3) the lower and upper bounds and the responsible
+		 * constraints.
+		 */
+		class CRLevelInfo {
+			Set<Term> mConstraints;
+			Rational mVarAssignment;
+			InfinitNumber mLowerBound, mUpperBound;
+			Term mLBConstraint, mUBConstraint;
+
+			public CRLevelInfo() {
+				mConstraints = new HashSet<Term>();
+				mVarAssignment = null;
+				mLowerBound = InfinitNumber.NEGATIVE_INFINITY;
+				mUpperBound = InfinitNumber.POSITIVE_INFINITY;
+				mLBConstraint = null;
+				mUBConstraint = null;
+			}
+		}
+
+		/**
+		 * Normalize the lhs of a constraint such that the top variable x_k has coefficient +-1.
+		 */
+		private InterpolatorAffineTerm normalizeForVar(InterpolatorAffineTerm affineTerm, Term topVar) {
+			final Rational coeff = affineTerm.getSummands().get(topVar);
+			Rational factor = coeff;
+			if (factor.isNegative()) {
+				factor = factor.negate();
+			}
+			return new InterpolatorAffineTerm(affineTerm).div(factor);
+		}
+
+		/**
+		 * Evaluate a term under the current assignment.
+		 */
+		private InfinitNumber evaluateTerm(InterpolatorAffineTerm constraintLHS) {
+			InfinitNumber evaluated = new InfinitNumber();
+			for (final Term var : constraintLHS.getSummands().keySet()) {
+				final int k = mOrderedVars.indexOf(var);
+				final Rational coeff = constraintLHS.getSummands().get(var);
+				final Rational value = mLevelInfo[k].mVarAssignment;
+				evaluated = evaluated.addmul(InfinitNumber.ONE, coeff.mul(value));
+			}
+			evaluated = evaluated.add(constraintLHS.getConstant());
+			return evaluated;
+		}
+
+		/**
+		 * Add a learned constraint: Normalize it and add it to the internal data structures.
+		 * 
+		 * @param constraintLHS
+		 *            The left hand side of the new constraint
+		 * @param level
+		 *            The level of the new constraint
+		 * @return The normalized constraint in the form "+-x_k + term <= 0" where x_k is the top variable.
+		 */
+		private Term addLearnedConstraint(InterpolatorAffineTerm constraintLHS, int k) {
+			final Term topVar = mOrderedVars.get(k);
+			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, topVar);
+			final Term normalConstraint = buildTermLeq0(normalLHS);
+			mConstraints.put(normalConstraint, normalLHS);
+			mLevelInfo[k].mConstraints.add(normalConstraint);
+			return normalConstraint;
+		}
 	}
 
 	/**
@@ -485,292 +724,5 @@ public class LRAInterpolatorWithCR {
 			leq0constraint = mTheory.term("<=", lhsTerm, zero);
 		}
 		return leq0constraint;
-	}
-
-	/* CONFLICT RESOLUTION - I made it as independent from anything else as possible. */
-
-	/**
-	 * The conflict resolution engine. Given constraints and an order on the occurring variables, this class contains
-	 * all the data structures and methods needed for conflict resolution.
-	 * 
-	 * TODO Rename this.
-	 */
-	class ConflictResolutionEngine {
-		/**
-		 * The ordered variables (ascending).
-		 */
-		Vector<Term> mOrderedVariables;
-		/**
-		 * A map from the constraint Terms to the corresponding InterpolatorAffineTerms for easy access to the summands.
-		 * It is used for the initial and learned constraints.
-		 */
-		Map<Term, InterpolatorAffineTerm> mConstraints;
-		/**
-		 * This map stores for each variable the set of constraints where it is the top variable.
-		 */
-		Map<Term, Set<Term>> mTopVariables;
-		/**
-		 * Current variable assignment
-		 */
-		Map<Term, Rational> mAssignments;
-		/**
-		 * The current conflict
-		 */
-		SymmetricPair<Term> mConflict;
-
-		public ConflictResolutionEngine(Vector<Term> variables) {
-			mOrderedVariables = variables;
-			mConstraints = new HashMap<Term, InterpolatorAffineTerm>();
-			mTopVariables = new HashMap<Term, Set<Term>>();
-			for (Term var : mOrderedVariables) {
-				mTopVariables.put(var, new HashSet<Term>());
-			}
-			mAssignments = new HashMap<Term, Rational>();
-			mConflict = null;
-		}
-
-		/**
-		 * Add constraints to the CR engine
-		 * 
-		 * @param constraint
-		 *            a constraint over the given variables
-		 * @return the normalized initial constraints
-		 */
-		private Term addConstraint(Term constraint) {
-			// TODO When dealing with = and !=, this should create a pair of constraints
-			InterpolatorAffineTerm constraintLHS = computeLHSForLeq0(constraint);
-			final Term topVar = computeTopVar(constraintLHS, mOrderedVariables.size() - 1);
-			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, topVar);
-			final Term normalConstraint = buildTermLeq0(normalLHS);
-			// Add the normalized constraints to the data structures for the CR engine
-			mTopVariables.get(topVar).add(normalConstraint);
-			mConstraints.put(normalConstraint, normalLHS);
-			return normalConstraint;
-		}
-
-		/**
-		 * Run the CR algorithm given a set of constraints and an order on the occurring variables.
-		 * 
-		 * @return The set of conflicts that have been detected during the run. (Note that it does not contain the
-		 *         conlict with resolvent \bot)
-		 */
-		private Map<Term, SymmetricPair<Term>> run() {
-			Map<Term, SymmetricPair<Term>> conflicts = new HashMap<Term, SymmetricPair<Term>>();
-			int k = 0;
-			outer: // TODO Does it make sense NOT to start with an assignment?
-			// TODO Is it easier and/or more efficient to loop over the top variables?
-			while (k < mOrderedVariables.size()) {
-				while (true) { // while there exists a k-conflict
-					final InterpolatorAffineTerm resLHS = detectConflict(k);
-					if (resLHS == null) { // There is no conflict
-						break;
-					}
-					k = computeLevel(resLHS, k - 1); // k := the level of the resolvent. It is -1 if no variable occurs.
-					if (k == -1) { // if k = -1 then return “unsatisfiable”
-						break outer;
-					}
-					final Term resolvent = addLearnedConstraint(resLHS, k); // (CR)
-					conflicts.put(resolvent, mConflict); // Add the conflict to the set of all occurring conflicts
-					// TODO Should this be done before "break" in order to get the conflict leading to \bot
-				}
-				updateAssignment(k); // xk->v, where v is a value satisfying all constraints of level <=k (AR)
-				k++;
-			}
-			return conflicts;
-		}
-
-		/* Main steps in the CR algorithm */
-		/**
-		 * Try to find a conflict in this level.
-		 * 
-		 * @return the resolvent's lhs
-		 */
-		private InterpolatorAffineTerm detectConflict(int level) {
-			final Term topVar = mOrderedVariables.get(level);
-			for (Term constraint : mTopVariables.get(topVar)) {
-				final InterpolatorAffineTerm constraintLHS = mConstraints.get(constraint);
-				final Rational coeff = constraintLHS.getSummands().get(topVar);
-				assert coeff == Rational.ONE || coeff == Rational.MONE;
-				// Find a constraint where the top variable has the opposite coefficient
-				// TODO This doesn't need to go through all constraints again.
-				for (Term other : mTopVariables.get(topVar)) {
-					final InterpolatorAffineTerm otherLHS = mConstraints.get(other);
-					if (!otherLHS.getSummands().get(topVar).equals(coeff.negate())) {
-						continue;
-					}
-					final InterpolatorAffineTerm resolventLHS =
-							new InterpolatorAffineTerm(constraintLHS).add(Rational.ONE, otherLHS);
-					final InfinitNumber evaluatedSum = evaluateTerm(resolventLHS);
-					if (!evaluatedSum.lesseq(InfinitNumber.ZERO)) {
-						mConflict = new SymmetricPair<Term>(constraint, other);
-						return resolventLHS;
-					}
-				}
-			}
-			return null;
-		}
-
-		/**
-		 * Compute the level of a constraint.
-		 * 
-		 * @param lhs
-		 *            The lhs of a constraint of form <code>term <= 0</code>
-		 * @return The number of the top variable, or -1 if the lhs is a constant
-		 */
-		private int computeLevel(InterpolatorAffineTerm lhs, int maxLevel) {
-			if (lhs.getSummands().isEmpty()) {
-				return -1;
-			} else {
-				int k = maxLevel;
-				while (k > 0) {
-					final Term var = mOrderedVariables.get(k);
-					if (lhs.getSummands().containsKey(var)) {
-						break;
-					}
-					k--;
-				}
-				return k;
-			}
-		}
-
-		/**
-		 * Add a learned constraint: Normalize it and add it to the internal data structures.
-		 * 
-		 * @param constraintLHS
-		 *            The left hand side of the new constraint
-		 * @param level
-		 *            The level of the new constraint
-		 * @return The normalized constraint in the form "+-x_k + term <= 0" where x_k is the top variable.
-		 */
-		private Term addLearnedConstraint(InterpolatorAffineTerm constraintLHS, int level) {
-			final Term topVar = mOrderedVariables.get(level);
-			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, topVar);
-			final Term normalConstraint = buildTermLeq0(normalLHS);
-			mTopVariables.get(topVar).add(normalConstraint);
-			mConstraints.put(normalConstraint, normalLHS);
-			return normalConstraint;
-		}
-
-		/**
-		 * Update the assignment for variable x_k by a value such that all constraints of level k are satisfied. Also,
-		 * remove all assignments for variables x_i > x_k unless x_k was assigned for the first time.
-		 * 
-		 * TODO Do we need the latter? At the moment not.
-		 */
-		private void updateAssignment(int k) {
-			final Term xk = mOrderedVariables.get(k);
-			if (mAssignments.containsKey(xk)) {
-				int i = k + 1;
-				while (i < mOrderedVariables.size()) {
-					final Term xi = mOrderedVariables.get(i);
-					if (!mAssignments.containsKey(xi)) {
-						break;
-					}
-					mAssignments.remove(xi);
-					i++;
-				}
-			}
-			final Rational updateValue = computeSatisfyingValue(xk);
-			mAssignments.put(xk, updateValue);
-		}
-
-		/**
-		 * Compute a value for a variable such that it satisfies all constraints of its level
-		 */
-		private Rational computeSatisfyingValue(Term topVar) {
-			if (mTopVariables.get(topVar).isEmpty()) {
-				return Rational.ZERO;
-			}
-			// Compute lower and upper bounds
-			// TODO Should we store the max lower bound and min upper bound at all times?
-			InfinitNumber lowerBound = InfinitNumber.NEGATIVE_INFINITY;
-			InfinitNumber upperBound = InfinitNumber.POSITIVE_INFINITY;
-			for (Term constraint : mTopVariables.get(topVar)) {
-				final InterpolatorAffineTerm constraintLHS = mConstraints.get(constraint);
-				final Rational factor = constraintLHS.getSummands().get(topVar);
-				final InterpolatorAffineTerm lhsWithoutXk =
-						new InterpolatorAffineTerm(constraintLHS).add(factor.negate(), topVar);
-				InfinitNumber bound = evaluateTerm(lhsWithoutXk);
-				if (factor.isNegative()) {
-					if (!bound.lesseq(lowerBound)) {
-						lowerBound = bound;
-					}
-				} else {
-					bound = bound.negate();
-					if (bound.less(upperBound)) {
-						upperBound = bound;
-					}
-				}
-			}
-			// Find a Rational in between. It must exist, else a conflict would have been detected.
-			final Rational satisfyingValue;
-			if (lowerBound.equals(InfinitNumber.NEGATIVE_INFINITY)) {
-				satisfyingValue = upperBound.mA.sub(Rational.ONE);
-			} else if (upperBound.equals(InfinitNumber.POSITIVE_INFINITY)) {
-				satisfyingValue = lowerBound.mA.add(Rational.ONE);
-			} else {
-				satisfyingValue = upperBound.mA.sub(upperBound.mA.sub(lowerBound.mA).div(Rational.TWO));
-			}
-			return satisfyingValue;
-		}
-
-		/**
-		 * Get the constraints, both initial and learned, from the conflict resolution.
-		 * 
-		 * @return A map of the constraints and their level.
-		 */
-		private Map<Term, Integer> getConstraints() {
-			Map<Term, Integer> constraintsWithLevel = new HashMap<Term, Integer>();
-			for (Entry<Term, Set<Term>> topVar : mTopVariables.entrySet()) {
-				int level = mOrderedVariables.indexOf(topVar.getKey());
-				for (Term constraint : topVar.getValue()) {
-					constraintsWithLevel.put(constraint, level);
-				}
-			}
-			return constraintsWithLevel;
-		}
-
-		/* Helper methods */
-
-		/**
-		 * Get the top variable of a constraint w.r.t. the given order on the variables.
-		 */
-		private Term computeTopVar(InterpolatorAffineTerm constraintLHS, int maxLevel) {
-			for (int k = maxLevel; k >= 0; k--) {
-				final Term var = mOrderedVariables.get(k);
-				if (constraintLHS.getSummands().containsKey(var)) {
-					return var;
-				}
-			}
-			return mOrderedVariables.get(0);
-		}
-
-		/**
-		 * Normalize the lhs of a constraint such that the top variable x_k has coefficient +-1.
-		 */
-		private InterpolatorAffineTerm normalizeForVar(InterpolatorAffineTerm affineTerm, Term topVar) {
-			final Rational coeff = affineTerm.getSummands().get(topVar);
-			Rational factor = coeff;
-			if (factor.isNegative()) {
-				factor = factor.negate();
-			}
-			return new InterpolatorAffineTerm(affineTerm).div(factor);
-		}
-
-		/**
-		 * Evaluate a term under the current assignment.
-		 */
-		private InfinitNumber evaluateTerm(InterpolatorAffineTerm constraintLHS) {
-			InfinitNumber evaluated = new InfinitNumber();
-			for (final Term var : constraintLHS.getSummands().keySet()) {
-				assert mAssignments.containsKey(var);
-				final Rational coeff = constraintLHS.getSummands().get(var);
-				final Rational value = mAssignments.get(var);
-				final Rational mult = coeff.mul(value);
-				evaluated = evaluated.addmul(InfinitNumber.ONE, mult);
-			}
-			evaluated = evaluated.add(constraintLHS.getConstant());
-			return evaluated;
-		}
 	}
 }
