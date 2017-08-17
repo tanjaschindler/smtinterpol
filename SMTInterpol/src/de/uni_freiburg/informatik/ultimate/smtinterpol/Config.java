@@ -108,6 +108,8 @@ public interface Config {
 	////// Interpolator Configuration
 	/// Should we check partial interpolants in interpolant-check-mode?
 	public static final boolean DEEP_CHECK_INTERPOLANTS = false;
+	/// Use CR-based interpolation for QF_LRA
+	public static final boolean CR_LRA_INTERPOLANTS = true;
 
 	////// Array solver configuration
 	/// Should we always add a read on the base array of a store?

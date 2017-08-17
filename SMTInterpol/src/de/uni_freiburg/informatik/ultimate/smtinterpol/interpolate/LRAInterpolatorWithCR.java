@@ -43,9 +43,6 @@ import de.uni_freiburg.informatik.ultimate.smtinterpol.theory.linar.InfinitNumbe
  * After calculating an interpolant based on Farkas' coefficients, we use Conflict Resolution to obtain an alternative
  * interpolant.
  * 
- * TODO For now, it can only deal with inequalities (where all are brought to non-strict form. Use InfinitNumber to
- * transform strict into non-strict). No equalities and disequalities supported (to be implemented).
- * 
  * @author Tanja Schindler
  */
 public class LRAInterpolatorWithCR {
@@ -103,12 +100,14 @@ public class LRAInterpolatorWithCR {
 	 * Compute the interpolants for this lemma based on Farkas' coefficients, while collecting the constraints needed
 	 * for the Conflict Resolution based interpolants.
 	 * 
-	 * TODO Store only the constraints for color < mNumInterpolants. TODO This is mostly copied. Check what is needed.
+	 * TODO Store only the constraints for color < mNumInterpolants.
+	 * 
+	 * TODO This is mostly copied. Check what is needed.
 	 * 
 	 * @param lemma
 	 *            The LA lemma (LRA only)
 	 * @return for each partition the set of constraints in A in the form <code>linVar <> 0</code> where
-	 *         <code><> \in {<=, <}</code>.
+	 *         <code><> \in {=, <=, <}</code>.
 	 */
 	private Set<Term>[] computeFarkasInterpolants(Term lemma) {
 		@SuppressWarnings("unchecked")
@@ -125,14 +124,6 @@ public class LRAInterpolatorWithCR {
 
 		@SuppressWarnings("unchecked")
 		final ArrayList<TermVariable>[] auxVars = new ArrayList[mNumInterpolants];
-		/*
-		 * these variables are used for trichotomy clauses. The inequalityInfo will remember the information for one of
-		 * the inequalities to get the aux literal. The equality will remember the equality literal and equalityInfo
-		 * will remember its info.
-		 */
-		// Term equality = null;
-		LitInfo equalityInfo = null;
-		Interpolator.Occurrence inequalityInfo = null;
 
 		/*
 		 * Add the A-part of the literals in this LA lemma.
@@ -143,82 +134,65 @@ public class LRAInterpolatorWithCR {
 			final Term lit = mInterpolator.mTheory.not(entry.getKey());
 			final InterpolatorLiteralTermInfo litTermInfo = mInterpolator.getLiteralTermInfo(lit);
 			final Rational factor = entry.getValue();
-			if (litTermInfo.isBoundConstraint() || (!litTermInfo.isNegated() && litTermInfo.isLAEquality())) {
-				InfinitNumber bound;
-				InterpolatorAffineTerm lv;
-				if (litTermInfo.isBoundConstraint()) {
-					assert factor.signum() == (litTermInfo.isNegated() ? -1 : 1);
-					bound = new InfinitNumber(litTermInfo.getBound(), 0);
-					// adapt the bound value for strict inequalities
-					if (((ApplicationTerm) litTermInfo.getAtom()).getFunction().getName().equals("<")) {
-						bound = bound.sub(litTermInfo.getEpsilon());
-					}
-					// get the inverse bound for negated literals
-					if (litTermInfo.isNegated()) {
-						bound = bound.add(litTermInfo.getEpsilon());
-					}
-					lv = litTermInfo.getLinVar();
-				} else {
-					// TODO How do we support them?
-					throw new IllegalArgumentException("(Dis-)Equalities not yet supported.");
-					// assert litTermInfo.isLAEquality();
-					// lv = litTermInfo.getLinVar();
-					// bound = new InfinitNumber(litTermInfo.getBound(), 0);
+
+			assert litTermInfo.isBoundConstraint() || !litTermInfo.isNegated();
+
+			InfinitNumber bound;
+			InterpolatorAffineTerm lv;
+			if (litTermInfo.isBoundConstraint()) {
+				assert factor.signum() == (litTermInfo.isNegated() ? -1 : 1);
+				bound = new InfinitNumber(litTermInfo.getBound(), 0);
+				// adapt the bound value for strict inequalities
+				if (((ApplicationTerm) litTermInfo.getAtom()).getFunction().getName().equals("<")) {
+					bound = bound.sub(litTermInfo.getEpsilon());
 				}
-				final LitInfo info = mInterpolator.getLiteralInfo(litTermInfo.getAtom());
-				inequalityInfo = info;
-
-				int color = info.mInB.nextClearBit(0);
-				while (color < ipl.length) {
-					if (info.isMixed(color)) {
-						/* ab-mixed interpolation */
-						assert (info.mMixedVar != null);
-						InterpolatorAffineTerm aPart = new InterpolatorAffineTerm(info.getAPart(color));
-						aPart = aPart.add(Rational.MONE, info.mMixedVar);
-						ipl[color].add(factor, aPart);
-
-						if (auxVars[color] == null) {
-							auxVars[color] = new ArrayList<TermVariable>();
-						}
-						auxVars[color].add(info.mMixedVar);
-
-						/* Store it to reuse it in the CR part */
-						constraints[color].add(buildTermLeq0(aPart.mul(factor)));
-					}
-					if (info.isALocal(color)) {
-						/* Literal in A: add to sum */
-						InterpolatorAffineTerm aPart = new InterpolatorAffineTerm(lv);
-						aPart = aPart.add(bound.negate());
-						ipl[color].add(factor, aPart);
-
-						/* Store it to reuse it in the CR part */
-						constraints[color].add(buildTermLeq0(aPart.mul(factor)));
-					}
-					color++;
+				// get the inverse bound for negated literals
+				if (litTermInfo.isNegated()) {
+					bound = bound.add(litTermInfo.getEpsilon());
 				}
-			} else if (litTermInfo.isNegated() && litTermInfo.isLAEquality()) {
-				// TODO How do we support them?
-				throw new IllegalArgumentException("(Dis-)Equalities not yet supported.");
-				// we have a Trichotomy Clause
-				// equality = litTermInfo.getAtom();
-				// final Term eq = equality;
-				// // a trichotomy clause must contain exactly three parts
-				// assert mLemmaInfo.getLiterals().size() == 3;// NOCHECKSTYLE
-				// assert equalityInfo == null;
-				// equalityInfo = mInterpolator.getLiteralInfo(eq);
-				// assert factor.abs() == Rational.ONE;
-				//
-				// int color = equalityInfo.mInB.nextClearBit(0);
-				// while (color < ipl.length) {
-				// if (equalityInfo.isALocal(color)) {
-				// /* Literal in A: add epsilon to sum */
-				// ipl[color].add(litTermInfo.getEpsilon());
-				//
-				// /* Store the literal to reuse it in the CR part */
-				// constraints[color].add(lit);
-				// }
-				// color++;
-				// }
+				lv = litTermInfo.getLinVar();
+			} else { // Equality
+				assert litTermInfo.isLAEquality();
+				lv = litTermInfo.getLinVar();
+				bound = new InfinitNumber(litTermInfo.getBound(), 0);
+			}
+			final LitInfo info = mInterpolator.getLiteralInfo(litTermInfo.getAtom());
+
+			int color = info.mInB.nextClearBit(0);
+			while (color < ipl.length) {
+				if (info.isMixed(color)) {
+					/* ab-mixed interpolation */
+					assert (info.mMixedVar != null);
+					InterpolatorAffineTerm aPart = new InterpolatorAffineTerm(info.getAPart(color));
+					aPart = aPart.add(Rational.MONE, info.mMixedVar);
+					ipl[color].add(factor, aPart);
+
+					if (auxVars[color] == null) {
+						auxVars[color] = new ArrayList<TermVariable>();
+					}
+					auxVars[color].add(info.mMixedVar);
+
+					/* Store it to reuse it in the CR part */
+					if (litTermInfo.isBoundConstraint()) {
+						constraints[color].add(buildConstraint(aPart.mul(factor), false));
+					} else { // Equality
+						constraints[color].add(buildConstraint(aPart.mul(factor), true));
+					}
+				}
+				if (info.isALocal(color)) {
+					/* Literal in A: add to sum */
+					InterpolatorAffineTerm aPart = new InterpolatorAffineTerm(lv);
+					aPart = aPart.add(bound.negate());
+					ipl[color].add(factor, aPart);
+
+					/* Store it to reuse it in the CR part */
+					if (litTermInfo.isBoundConstraint()) {
+						constraints[color].add(buildConstraint(aPart.mul(factor), false));
+					} else { // Equality
+						constraints[color].add(buildConstraint(aPart.mul(factor), true));
+					}
+				}
+				color++;
 			}
 		}
 		assert (ipl[ipl.length - 1].isConstant() && InfinitNumber.ZERO.less(ipl[ipl.length - 1].getConstant()));
@@ -243,51 +217,20 @@ public class LRAInterpolatorWithCR {
 				 */
 				InfinitNumber k;
 				Term F;
-				if (equalityInfo != null) { // NOPMD
-					// TODO How do we support them?
-					throw new IllegalArgumentException("(Dis-)Equalities not yet supported.");
-					/*
-					 * This is a mixed trichotomy clause. This requires a very special interpolant.
-					 */
-					// assert equalityInfo.isMixed(color);
-					// assert auxVars[color].size() == 2;
-					// assert normFactor == Rational.ONE;
-					// final InterpolatorAffineTerm less =
-					// new InterpolatorAffineTerm(ipl[color]).add(InfinitNumber.EPSILON);
-					// k = InfinitNumber.ZERO;
-					// F = mInterpolator.mTheory.and(ipl[color].toLeq0(mInterpolator.mTheory),
-					// mInterpolator.mTheory.or(less.toLeq0(mInterpolator.mTheory), mInterpolator.mTheory
-					// .equals(equalityInfo.getMixedVar(), auxVars[color].iterator().next())));
+				/* The inequalities are mixed. */
+				if (ipl[color].isInt()) {
+					k = InfinitNumber.ONE.negate();
 				} else {
-					/* Just the inequalities are mixed. */
-					if (ipl[color].isInt()) {
-						k = InfinitNumber.ONE.negate();
-					} else {
-						k = InfinitNumber.EPSILON.negate();
-					}
-					F = ipl[color].toLeq0(mTheory);
+					k = InfinitNumber.EPSILON.negate();
 				}
+				F = ipl[color].toLeq0(mTheory);
 				final LATerm laTerm = new LATerm(ipl[color], k, F);
 				mOldInterpolants[color].mTerm = laTerm;
 				// TODO Compare old interpolants with new interpolants to find out how to build the LATerm later.
-				farkasInterpolants[color] = buildTermLeq0(ipl[color]);
+				farkasInterpolants[color] = buildConstraint(ipl[color], false);
 			} else {
-				assert (equalityInfo == null || !equalityInfo.isMixed(color));
-				if (equalityInfo != null && ipl[color].isConstant()
-						&& equalityInfo.isALocal(color) != inequalityInfo.isALocal(color)) {
-					// TODO How do we support them?
-					throw new IllegalArgumentException("(Dis-)Equalities not yet supported.");
-					/*
-					 * special case: Nelson-Oppen conflict, a <= b and b <= a in one partition, a != b in the other. If
-					 * a != b is in A, the interpolant is simply a != b. If a != b is in B, the interpolant is simply a
-					 * == b.
-					 */
-					// final Term thisIpl = equalityInfo.isALocal(color) ? mTheory.not(equality) : equality;
-					// mOldInterpolants[color].mTerm = thisIpl;
-				} else {
-					mOldInterpolants[color].mTerm = ipl[color].toLeq0(mTheory);
-					farkasInterpolants[color] = buildTermLeq0(ipl[color]);
-				}
+				mOldInterpolants[color].mTerm = ipl[color].toLeq0(mTheory);
+				farkasInterpolants[color] = buildConstraint(ipl[color], false);
 			}
 		}
 		mFarkasInterpolants = farkasInterpolants;
@@ -396,13 +339,20 @@ public class LRAInterpolatorWithCR {
 		 * A map from the constraint Terms to the corresponding InterpolatorAffineTerms for easy access to the summands.
 		 * It is used for the initial and learned constraints.
 		 */
-		Map<Term, InterpolatorAffineTerm> mConstraints;
-
+		Map<Term, InterpolatorAffineTerm> mConstraintsWithLHS;
+		/**
+		 * A map from the constraints to the relational operators =, <=, <
+		 */
+		Map<Term, String> mConstraintsWithRelOp;
+		/**
+		 * The information about each level containing bounds and constraints
+		 */
 		CRLevelInfo[] mLevelInfo;
 
 		public ConflictResolutionEngine(Vector<Term> variables) {
 			mOrderedVars = variables;
-			mConstraints = new HashMap<Term, InterpolatorAffineTerm>();
+			mConstraintsWithLHS = new HashMap<Term, InterpolatorAffineTerm>();
+			mConstraintsWithRelOp = new HashMap<Term, String>();
 			mLevelInfo = new CRLevelInfo[variables.size()];
 			for (int k = 0; k < variables.size(); k++) {
 				mLevelInfo[k] = new CRLevelInfo();
@@ -413,18 +363,36 @@ public class LRAInterpolatorWithCR {
 		 * Add constraints to the CR engine
 		 * 
 		 * @param constraint
-		 *            a constraint over the given variables
+		 *            a constraint over the given variables that can be negated.
 		 * @return the normalized initial constraints
 		 */
 		private Term addConstraint(Term constraint) {
-			// TODO When dealing with = and !=, this should create a pair of constraints
-			InterpolatorAffineTerm constraintLHS = computeLHSForLeq0(constraint);
+			InterpolatorAffineTerm constraintLHS = computeLHS(constraint);
 			final int k = computeLevel(constraintLHS);
 			final Term xk = mOrderedVars.get(k);
 			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, xk);
-			final Term normalConstraint = buildTermLeq0(normalLHS);
+			final Term normalConstraint;
+			boolean isNeg = false;
+			String relOp;
+			assert constraint instanceof ApplicationTerm;
+			// Get the relational operator.
+			if (((ApplicationTerm) constraint).getFunction().getName().equals("not")) {
+				isNeg = true;
+				constraint = ((ApplicationTerm) constraint).getParameters()[0];
+			}
+			relOp = ((ApplicationTerm) constraint).getFunction().getName();
+			if (relOp == "=") {
+				normalConstraint = buildConstraint(normalLHS, true);
+			} else {
+				assert relOp == "<" || relOp == "<=";
+				normalConstraint = buildConstraint(normalLHS, false);
+			}
 			// Add the normalized constraints to the data structures for the CR engine
-			mConstraints.put(normalConstraint, normalLHS);
+			mConstraintsWithLHS.put(normalConstraint, normalLHS);
+			if (isNeg) {
+				relOp = ((ApplicationTerm) normalConstraint).getFunction().getName();
+			}
+			mConstraintsWithRelOp.put(normalConstraint, relOp);
 			mLevelInfo[k].mConstraints.add(normalConstraint);
 			return normalConstraint;
 		}
@@ -432,8 +400,7 @@ public class LRAInterpolatorWithCR {
 		/**
 		 * Run the CR algorithm given a set of constraints and an order on the occurring variables.
 		 * 
-		 * @return The set of conflicts that have been detected during the run. (Note that it does not contain the
-		 *         conlict with resolvent \bot)
+		 * @return The interpolant conjuncts
 		 */
 		private Set<Term> run(int color) {
 			Set<Term> itpConjuncts = new HashSet<Term>();
@@ -444,13 +411,30 @@ public class LRAInterpolatorWithCR {
 					updateAssignment(k);
 				} else {
 					while (!done && isInConflict(k)) {
-						final InterpolatorAffineTerm resLHS = resolveConflict(k); // (CR)
+						// Add the parent constraints to the interpolant if they were initial constraints over shared
+						// vars
 						final int parentK = k;
+						final Term parent = mLevelInfo[parentK].mLBConstraint;
+						final Term otherParent = mLevelInfo[parentK].mUBConstraint;
+						if (parentK < mFirstAVar[color]) {
+							if (mInitialAConstraints[color].contains(parent)) {
+								itpConjuncts.add(parent);
+							}
+							if (mInitialAConstraints[color].contains(otherParent)) {
+								itpConjuncts.add(otherParent);
+							}
+						}
+						// Resolve
+						final InterpolatorAffineTerm resLHS = resolveConflict(k); // (CR)
 						k = computeLevel(resLHS); // k := the level of the resolvent. It is -1 if no variable occurs.
 						if (k != -1) {
-							final Term resolvent = addLearnedConstraint(resLHS, k);
+							final Term resolvent = addLearnedConstraint(resLHS, k, parentK);
 							updateBounds(k, resolvent);
-							addInterpolantConjuncts(itpConjuncts, parentK, k, resolvent, color);
+							// Add the resolvent to the interpolant if the parents had A-local vars and the resolvent
+							// not.
+							if (k < mFirstAVar[color] && parentK >= mFirstAVar[color]) {
+								itpConjuncts.add(resolvent);
+							}
 						} else { // if k = -1 then we are done
 							done = true;
 						}
@@ -458,7 +442,6 @@ public class LRAInterpolatorWithCR {
 					if (!done) {
 						updateAssignment(k); // xk->v, where v is a value satisfying all constraints of level <= k (AR)
 					}
-
 				}
 			}
 			return itpConjuncts;
@@ -467,6 +450,9 @@ public class LRAInterpolatorWithCR {
 		/* Main steps in the CR algorithm */
 		/**
 		 * Recalculate the bounds for a variable using all constraints of the level.
+		 * 
+		 * @param k
+		 *            the level.
 		 */
 		private void recalculateBounds(int k) {
 			// Reset bounds
@@ -480,10 +466,15 @@ public class LRAInterpolatorWithCR {
 
 		/**
 		 * Update the bounds for a variable using one constraint.
+		 * 
+		 * @param k
+		 *            the level
+		 * @param constraint
+		 *            the constraint responsible for the bound update
 		 */
 		private void updateBounds(int k, Term constraint) {
 			final Term xk = mOrderedVars.get(k);
-			final InterpolatorAffineTerm constraintLHS = mConstraints.get(constraint);
+			final InterpolatorAffineTerm constraintLHS = mConstraintsWithLHS.get(constraint);
 			final Rational factor = constraintLHS.getSummands().get(xk);
 			final InterpolatorAffineTerm lhsWithoutXk =
 					new InterpolatorAffineTerm(constraintLHS).add(factor.negate(), xk);
@@ -493,34 +484,68 @@ public class LRAInterpolatorWithCR {
 					mLevelInfo[k].mLowerBound = bound;
 					mLevelInfo[k].mLBConstraint = constraint;
 				}
+				// For an equality, we have to update the upper bound if the new value is less
+				if (mConstraintsWithRelOp.get(constraint) == "=" && bound.less(mLevelInfo[k].mUpperBound)) {
+					mLevelInfo[k].mUpperBound = bound;
+					mLevelInfo[k].mUBConstraint = constraint;
+				}
 			} else {
 				bound = bound.negate();
 				if (bound.less(mLevelInfo[k].mUpperBound)) {
 					mLevelInfo[k].mUpperBound = bound;
 					mLevelInfo[k].mUBConstraint = constraint;
 				}
+				// For an equality, we have to update the lower bound if the new value is greater
+				if (mConstraintsWithRelOp.get(constraint) == "=" && !bound.lesseq(mLevelInfo[k].mLowerBound)) {
+					mLevelInfo[k].mLowerBound = bound;
+					mLevelInfo[k].mLBConstraint = constraint;
+				}
 			}
 		}
 
 		/**
 		 * Check if there is a conflict, i.e. if a variable's lower bound is greater than its upper bound.
+		 * 
+		 * @param k
+		 *            the level.
 		 */
 		private boolean isInConflict(int k) {
 			return mLevelInfo[k].mUpperBound.less(mLevelInfo[k].mLowerBound);
 		}
 
 		/**
-		 * Try to find a conflict in this level.
+		 * Resolve the conflict in the given level.
 		 * 
+		 * @param k
+		 *            the level.
 		 * @return the resolvent's lhs
 		 */
 		private InterpolatorAffineTerm resolveConflict(int k) {
+			assert mLevelInfo[k].mUpperBound.less(mLevelInfo[k].mLowerBound);
+			final Term topVar = mOrderedVars.get(k);
 			final Term lowerConstraint = mLevelInfo[k].mLBConstraint;
 			final Term upperConstraint = mLevelInfo[k].mUBConstraint;
-			final InterpolatorAffineTerm lowerLHS = mConstraints.get(lowerConstraint);
-			final InterpolatorAffineTerm upperLHS = mConstraints.get(upperConstraint);
-			final InterpolatorAffineTerm resolventLHS =
-					new InterpolatorAffineTerm(lowerLHS).add(Rational.ONE, upperLHS);
+			final InterpolatorAffineTerm lowerLHS = mConstraintsWithLHS.get(lowerConstraint);
+			final InterpolatorAffineTerm upperLHS = mConstraintsWithLHS.get(upperConstraint);
+			final InterpolatorAffineTerm resolventLHS;
+
+			// In case we have an equality in one constraint, we have to multiply it by -1 if the top variable has the
+			// same sign in the other constraint
+			if (mConstraintsWithRelOp.get(lowerConstraint) == "=") {
+				if (lowerLHS.getSummands().get(topVar).equals(upperLHS.getSummands().get(topVar))) {
+					resolventLHS = new InterpolatorAffineTerm(upperLHS).add(Rational.MONE, lowerLHS);
+				} else {
+					resolventLHS = new InterpolatorAffineTerm(upperLHS).add(Rational.ONE, lowerLHS);
+				}
+			} else if (mConstraintsWithRelOp.get(upperConstraint) == "=") {
+				if (upperLHS.getSummands().get(topVar).equals(lowerLHS.getSummands().get(topVar))) {
+					resolventLHS = new InterpolatorAffineTerm(lowerLHS).add(Rational.MONE, upperLHS);
+				} else {
+					resolventLHS = new InterpolatorAffineTerm(lowerLHS).add(Rational.ONE, upperLHS);
+				}
+			} else { // A conflict between two term <(=) 0 requires coeffs +1 and -1
+				resolventLHS = new InterpolatorAffineTerm(lowerLHS).add(Rational.ONE, upperLHS);
+			}
 			return resolventLHS;
 		}
 
@@ -561,32 +586,6 @@ public class LRAInterpolatorWithCR {
 				mLevelInfo[k].mVarAssignment = lowerBound.mA.add(Rational.ONE);
 			} else {
 				mLevelInfo[k].mVarAssignment = upperBound.mA.add(lowerBound.mA).div(Rational.TWO);
-			}
-		}
-
-		/**
-		 * Add constraints of a conflict to the set of interpolant conjuncts, if (1) they are initial constraints over
-		 * shared variables only, or (2) they are resolvents of constraints containing A-local variables, but contain
-		 * only shared variables themselves.
-		 */
-		private void addInterpolantConjuncts(Set<Term> itpConjuncts, int parentLevel, int resLevel, Term resolvent,
-				int color) {
-			// Add initial constraints over shared variables if they occur in a conflict
-			final Term parent = mLevelInfo[parentLevel].mLBConstraint;
-			final Term otherParent = mLevelInfo[parentLevel].mUBConstraint;
-			if (parentLevel < mFirstAVar[color]) {
-				if (mInitialAConstraints[color].contains(parent)) {
-					itpConjuncts.add(parent);
-				}
-				if (mInitialAConstraints[color].contains(otherParent)) {
-					itpConjuncts.add(otherParent);
-				}
-			}
-			// Add constraints over shared variables if they are resolvents of constraints with A-local variables.
-			if (resLevel < mFirstAVar[color]) {
-				if (parentLevel >= mFirstAVar[color]) {
-					itpConjuncts.add(resolvent);
-				}
 			}
 		}
 
@@ -648,60 +647,66 @@ public class LRAInterpolatorWithCR {
 		 *            The level of the new constraint
 		 * @return The normalized constraint in the form "+-x_k + term <= 0" where x_k is the top variable.
 		 */
-		private Term addLearnedConstraint(InterpolatorAffineTerm constraintLHS, int k) {
+		private Term addLearnedConstraint(InterpolatorAffineTerm constraintLHS, int k, int parentK) {
 			final Term topVar = mOrderedVars.get(k);
 			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, topVar);
-			final Term normalConstraint = buildTermLeq0(normalLHS);
-			mConstraints.put(normalConstraint, normalLHS);
+			final String firstRelOp = mConstraintsWithRelOp.get(mLevelInfo[k].mLBConstraint);
+			final String secondRelOp = mConstraintsWithRelOp.get(mLevelInfo[k].mUBConstraint);
+			final Term normalConstraint;
+			final String relOp;
+			if (firstRelOp == "=" && secondRelOp == "=") {
+				normalConstraint = buildConstraint(normalLHS, true);
+				relOp = "=";
+			} else {
+				normalConstraint = buildConstraint(normalLHS, false);
+				relOp = ((ApplicationTerm) normalConstraint).getFunction().getName();
+			}
+			mConstraintsWithLHS.put(normalConstraint, normalLHS);
+			mConstraintsWithRelOp.put(normalConstraint, relOp);
 			mLevelInfo[k].mConstraints.add(normalConstraint);
 			return normalConstraint;
 		}
 	}
 
 	/**
-	 * Collect the left hand side of a constraint of form <code>term <= 0</code>
+	 * Collect the left hand side of a constraint of form <code>term <> 0</code> with <code> <> \in {=,<=,<}</code>
 	 * 
 	 * @param constraint
 	 *            a LRA constraint
 	 * @return the LHS of the constraint
 	 */
-	private InterpolatorAffineTerm computeLHSForLeq0(Term constraint) {
+	private InterpolatorAffineTerm computeLHS(Term constraint) {
 		final InterpolatorAffineTerm leq0Lhs;
 		final InterpolatorLiteralTermInfo info = mInterpolator.getLiteralTermInfo(constraint);
-		if (info.isBoundConstraint()) {
-			Rational negationFactor = Rational.ONE;
-			if (info.isNegated()) {
-				negationFactor = Rational.MONE;
-			}
-			final InterpolatorAffineTerm linVar = info.getLinVar();
-			InfinitNumber bound = new InfinitNumber(info.getBound(), 0);
-			// Get the inverse bound for negated literals
-			if (info.isNegated()) {
-				bound = bound.add(info.getEpsilon());
-			}
-			// Adapt the bound value for strict inequalities
-			if (((ApplicationTerm) info.getAtom()).getFunction().getName().equals("<")) {
-				bound = bound.sub(info.getEpsilon());
-			}
-			leq0Lhs = new InterpolatorAffineTerm(linVar.mul(negationFactor)).add(bound.negate().mul(negationFactor));
-		} else { // Build two inequalities from (dis-)equalities
-			throw new IllegalArgumentException("(Dis-)Equalities not yet supported.");
+		Rational negationFactor = Rational.ONE;
+		if (info.isNegated()) {
+			negationFactor = Rational.MONE;
 		}
+		final InterpolatorAffineTerm linVar = info.getLinVar();
+		InfinitNumber bound = new InfinitNumber(info.getBound(), 0);
+		// Get the inverse bound for negated literals
+		if (info.isNegated()) {
+			bound = bound.add(info.getEpsilon());
+		}
+		// Adapt the bound value for strict inequalities
+		if (((ApplicationTerm) info.getAtom()).getFunction().getName().equals("<")) {
+			bound = bound.sub(info.getEpsilon());
+		}
+		leq0Lhs = new InterpolatorAffineTerm(linVar.mul(negationFactor)).add(bound.negate().mul(negationFactor));
 		return leq0Lhs;
 	}
 
 	/**
-	 * Create a constraint of form <code>term <> 0</code> from the lhs where <code><>\in{<,<=}</code>
+	 * Create a constraint of form <code>term <> 0</code> from the lhs where <code><>\in{<,<=,=}</code>
 	 * 
 	 * @param lhs
 	 *            the left side of the constraint
+	 * @param isEq
+	 *            determines if the constraint is an equality (true) or inequality (false)
 	 * @return the constraint term of form <code>term <> 0</code>
 	 */
-	private Term buildTermLeq0(InterpolatorAffineTerm lhs) {
-		final boolean isInt = false; // = lhs.isInt(); TODO Not needed for Rationals, but will we extend this?
-		final Sort sort = mTheory.getSort(isInt ? "Int" : "Real");
-		// TODO The following is done because InterpolatorAffineTerm.toSMTLib builds nested sums (might be changed in
-		// the future) and we cannot deal with them here.
+	private Term buildConstraint(InterpolatorAffineTerm lhs, boolean isEq) {
+		final Sort sort = mTheory.getSort("Real");
 		final InfinitNumber constant = lhs.getConstant();
 		final Term constTerm = constant.mA.equals(Rational.ZERO) ? null : constant.mA.toTerm(sort);
 		final Term[] subTerms = new Term[lhs.getSummands().size() + (constTerm == null ? 0 : 1)];
@@ -717,12 +722,16 @@ public class LRAInterpolatorWithCR {
 		final Term lhsTerm = subTerms.length == 1 ? subTerms[0] : mTheory.term("+", subTerms);
 		// final Term lhsTerm = lhs.toSMTLib(mTheory, isInt); // TODO Use this if toSMTLib stops building nested sums
 		final Term zero = Rational.ZERO.toTerm(sort);
-		final Term leq0constraint;
-		if (lhs.getConstant().mEps != 0) {
-			leq0constraint = mTheory.term("<", lhsTerm, zero);
+		final Term constraint;
+		if (isEq) {
+			constraint = mTheory.term("=", lhsTerm, zero);
 		} else {
-			leq0constraint = mTheory.term("<=", lhsTerm, zero);
+			if (lhs.getConstant().mEps != 0) {
+				constraint = mTheory.term("<", lhsTerm, zero);
+			} else {
+				constraint = mTheory.term("<=", lhsTerm, zero);
+			}
 		}
-		return leq0constraint;
+		return constraint;
 	}
 }
