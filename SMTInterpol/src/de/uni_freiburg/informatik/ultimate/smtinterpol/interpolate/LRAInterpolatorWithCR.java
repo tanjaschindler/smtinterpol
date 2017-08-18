@@ -650,8 +650,8 @@ public class LRAInterpolatorWithCR {
 		private Term addLearnedConstraint(InterpolatorAffineTerm constraintLHS, int k, int parentK) {
 			final Term topVar = mOrderedVars.get(k);
 			final InterpolatorAffineTerm normalLHS = normalizeForVar(constraintLHS, topVar);
-			final String firstRelOp = mConstraintsWithRelOp.get(mLevelInfo[k].mLBConstraint);
-			final String secondRelOp = mConstraintsWithRelOp.get(mLevelInfo[k].mUBConstraint);
+			final String firstRelOp = mConstraintsWithRelOp.get(mLevelInfo[parentK].mLBConstraint);
+			final String secondRelOp = mConstraintsWithRelOp.get(mLevelInfo[parentK].mUBConstraint);
 			final Term normalConstraint;
 			final String relOp;
 			if (firstRelOp == "=" && secondRelOp == "=") {
