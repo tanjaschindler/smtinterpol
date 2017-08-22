@@ -274,7 +274,9 @@ public class LRAInterpolatorWithCR {
 				mInitialAConstraints[color].add(normalizedConstraint);
 			}
 			// Add the negated Farkas interpolant
-			crEngine.addConstraint(mTheory.not(mFarkasInterpolants[color]));
+			if (!(mFarkasInterpolants[color].equals(mTheory.mTrue) || mFarkasInterpolants[color].equals(mTheory.mFalse)) ) {
+				crEngine.addConstraint(mTheory.not(mFarkasInterpolants[color]));
+			}
 			// CR algorithm
 			Set<Term> itpConjuncts = crEngine.run(color);
 			crInterpolants[color] = mTheory.and(itpConjuncts.toArray(new Term[itpConjuncts.size()]));
@@ -706,6 +708,9 @@ public class LRAInterpolatorWithCR {
 	 * @return the constraint term of form <code>term <> 0</code>
 	 */
 	private Term buildConstraint(InterpolatorAffineTerm lhs, boolean isEq) {
+		if (lhs.isConstant()) {
+			return lhs.getConstant().compareTo(InfinitNumber.ZERO) <= 0 ? mTheory.mTrue : mTheory.mFalse;
+		}
 		final Sort sort = mTheory.getSort("Real");
 		final InfinitNumber constant = lhs.getConstant();
 		final Term constTerm = constant.mA.equals(Rational.ZERO) ? null : constant.mA.toTerm(sort);
