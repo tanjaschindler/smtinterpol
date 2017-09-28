@@ -73,11 +73,7 @@ public class LAInterpolator {
 	}
 
 	/**
-	 * Create a new linear arithmetic interpolator for an LA lemma. <<<<<<< HEAD
-	 * 
-	 * =======
-	 *
-	 * >>>>>>> refs/heads/master
+	 * Create a new linear arithmetic interpolator for an LA lemma.
 	 * 
 	 * @param interpolator
 	 *            the global interpolator.

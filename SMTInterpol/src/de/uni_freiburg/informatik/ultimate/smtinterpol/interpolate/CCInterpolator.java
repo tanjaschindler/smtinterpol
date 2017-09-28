@@ -131,11 +131,7 @@ public class CCInterpolator {
 			/**
 			 * Close the A path for partition color. This is called when we add a term to the chain that is B-local for
 			 * the current mColor. We set mColor to the parent node. We also close the open path on mColor or open a new
-			 * one and increment mMaxColor if such a path was not yet open. <<<<<<< HEAD
-			 * 
-			 * =======
-			 *
-			 * >>>>>>> refs/heads/master
+			 * one and increment mMaxColor if such a path was not yet open.
 			 * 
 			 * @param other
 			 *            the other PathEnd
@@ -341,6 +337,10 @@ public class CCInterpolator {
 		 * [m_HeadColor, numInterpolants] HeadColor is in between first and last color of head term. likewise for Tail.
 		 * MaxColor is maximum of all first of all terms and literals involved in current path (but there may be bigger
 		 * literals in congruence paths that were added to headPre/tailPre).
+		 *
+		 * The partial interpolant of the current path is m_Interpolants && HeadPre ==> Lits[0] == m_HeadTerm && TailPre
+		 * ==> m_TailTerm == lits[n] where HeadTerm = Lits[0] for partitions < HeadColor and TailTerm = Lits[n] for
+		 * partitions < TailColor.
 		 *
 		 * For partitions >= maxColor, everything so far was in A, so the partial interpolant of the current path is
 		 * m_Interpolants && TailPre ==> Lits[0] == lits[n]

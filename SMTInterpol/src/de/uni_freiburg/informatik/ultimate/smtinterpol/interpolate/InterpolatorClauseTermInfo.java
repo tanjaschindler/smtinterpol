@@ -165,10 +165,7 @@ public class InterpolatorClauseTermInfo {
 	}
 
 	/**
-	 * Fill in the field mLiterals for this resolution term only if needed (i.e. if deep check is switched on) <<<<<<<
-	 * HEAD
-	 * 
-	 * ======= >>>>>>> refs/heads/master
+	 * Fill in the field mLiterals for this resolution term only if needed (i.e. if deep check is switched on)
 	 */
 	public void computeResolutionLiterals(Interpolator interpolator) {
 		assert mIsResolution;
@@ -461,10 +458,7 @@ public class InterpolatorClauseTermInfo {
 	/**
 	 * For a CC or array lemma, get the sub- and weak paths.
 	 * 
-	 * <<<<<<< HEAD
-	 * 
-	 * @return paths an array where the strings ":subpath"/":weakpath" and Term arrays are alternating =======
-	 * @return paths an array containing the proof paths >>>>>>> refs/heads/master
+	 * @return paths an array containing the proof paths
 	 */
 	private ProofPath[] computePaths(Term lemma) {
 		final AnnotatedTerm inner = (AnnotatedTerm) ((ApplicationTerm) lemma).getParameters()[0];

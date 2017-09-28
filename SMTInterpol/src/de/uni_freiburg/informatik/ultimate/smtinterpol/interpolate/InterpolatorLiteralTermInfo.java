@@ -27,11 +27,7 @@ import de.uni_freiburg.informatik.ultimate.smtinterpol.convert.SMTAffineTerm;
 import de.uni_freiburg.informatik.ultimate.smtinterpol.theory.linar.InfinitNumber;
 
 /**
- * This class is used to gather the information from a literal term which is relevant for the interpolator. <<<<<<< HEAD
- * 
- * =======
- *
- * >>>>>>> refs/heads/master
+ * This class is used to gather the information from a literal term which is relevant for the interpolator.
  * 
  * @author Tanja Schindler
  */
