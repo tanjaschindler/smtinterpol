@@ -18,8 +18,6 @@
  */
 package de.uni_freiburg.informatik.ultimate.smtinterpol.interpolate;
 
-import java.util.Arrays;
-
 import de.uni_freiburg.informatik.ultimate.logic.AnnotatedTerm;
 import de.uni_freiburg.informatik.ultimate.logic.ApplicationTerm;
 import de.uni_freiburg.informatik.ultimate.logic.ConstantTerm;
@@ -29,10 +27,13 @@ import de.uni_freiburg.informatik.ultimate.smtinterpol.convert.SMTAffineTerm;
 import de.uni_freiburg.informatik.ultimate.smtinterpol.theory.linar.InfinitNumber;
 
 /**
- * This class is used to gather the information from a literal term which is relevant for the interpolator.
+ * This class is used to gather the information from a literal term which is relevant for the interpolator. <<<<<<< HEAD
+ * 
+ * =======
+ *
+ * >>>>>>> refs/heads/master
  * 
  * @author Tanja Schindler
- * 
  */
 public class InterpolatorLiteralTermInfo {
 	/**
@@ -88,7 +89,7 @@ public class InterpolatorLiteralTermInfo {
 	/**
 	 * Collect information about this literal which is needed during interpolation
 	 */
-	public void computeLiteralTermInfo(Term term) {
+	public void computeLiteralTermInfo(final Term term) {
 		Term literal = term;
 		if (term instanceof AnnotatedTerm) {
 			literal = ((AnnotatedTerm) term).getSubterm();
@@ -102,9 +103,11 @@ public class InterpolatorLiteralTermInfo {
 		mIsBoundConstraint = isBoundConstraint(mAtom);
 
 		if (mIsLAEquality || mIsBoundConstraint) {
-			mLinVar = computeLinVar(mAtom);
+			final InterpolatorAffineTerm lv = computeLinVarAndBound(mAtom);
+			assert lv.getConstant().mEps == 0;
+			mBound = lv.getConstant().negate().mA;
+			mLinVar = lv.add(mBound);
 			mIsInt = mLinVar.isInt();
-			mBound = computeBound(mAtom);
 			mEpsilon = computeEpsilon(mAtom);
 		}
 	}
@@ -112,7 +115,7 @@ public class InterpolatorLiteralTermInfo {
 	/**
 	 * Get the underlying atomic term for an annotated or negated term
 	 */
-	private Term computeAtom(Term term) {
+	private Term computeAtom(final Term term) {
 		Term inner = term;
 		if (isNegated(inner)) {
 			inner = ((ApplicationTerm) inner).getParameters()[0];
@@ -126,7 +129,7 @@ public class InterpolatorLiteralTermInfo {
 	/**
 	 * Check if this atom is a CC equality.
 	 */
-	private boolean isCCEquality(Term atom) {
+	private boolean isCCEquality(final Term atom) {
 		if (atom instanceof ApplicationTerm && ((ApplicationTerm) atom).getFunction().isIntern()) {
 			if (((ApplicationTerm) atom).getFunction().getName().equals("=")) {
 				return !isLAEquality(atom);
@@ -139,11 +142,11 @@ public class InterpolatorLiteralTermInfo {
 	 * Check if this atom is a LA equality. Note that some CC equalities look like LA equalities, but in those cases,
 	 * they are treated the same way.
 	 */
-	boolean isLAEquality(Term atom) {
-		if ((atom instanceof ApplicationTerm)) {
+	boolean isLAEquality(final Term atom) {
+		if (atom instanceof ApplicationTerm) {
 			if (((ApplicationTerm) atom).getFunction().getName().equals("=")) {
 				final Term secondParam = ((ApplicationTerm) atom).getParameters()[1];
-				if ((secondParam instanceof ConstantTerm)) {
+				if (secondParam instanceof ConstantTerm) {
 					return SMTAffineTerm.create(secondParam).getConstant().equals(Rational.ZERO);
 				}
 			}
@@ -154,82 +157,39 @@ public class InterpolatorLiteralTermInfo {
 	/**
 	 * Check if this atom is a bound constraint
 	 */
-	private Boolean isBoundConstraint(Term atom) {
+	private Boolean isBoundConstraint(final Term atom) {
 		if (!(atom instanceof ApplicationTerm)) {
 			return false;
 		}
 		final String func = ((ApplicationTerm) atom).getFunction().getName();
-		return (func.equals("<") || func.equals("<="));
+		return func.equals("<") || func.equals("<=");
 	}
 
 	/**
 	 * For an LA equality or bound constraint, get the linear variable.
 	 */
-	private InterpolatorAffineTerm computeLinVar(Term laTerm) {
+	private InterpolatorAffineTerm computeLinVarAndBound(final Term laTerm) {
 		final Term laAtom = computeAtom(laTerm);
-		Term varTerm = ((ApplicationTerm) laAtom).getParameters()[0];
-		if (varTerm instanceof ApplicationTerm && ((ApplicationTerm) varTerm).getFunction().isIntern()) {
-			String function = ((ApplicationTerm) varTerm).getFunction().getName();
-			if (function.equals("+")) {
-				int length = ((ApplicationTerm) varTerm).getParameters().length;
-				if (!computeBound(laAtom).equals(Rational.ZERO)) {
-					length -= 1;
-				}
-				final Term[] varParams = Arrays.copyOf(((ApplicationTerm) varTerm).getParameters(), length);
-				if (length == 1) {
-					varTerm = varParams[0];
-				} else {
-					varTerm = varTerm.getTheory().term("+", varParams);
-				}
-			}
-		}
-		InterpolatorAffineTerm linVar = Interpolator.termToAffine(varTerm);
-		return linVar;
-	}
+		final Term[] params = ((ApplicationTerm) laAtom).getParameters();
+		final Term varTerm = params[0];
 
-	/**
-	 * Get the bound of a bound constraint. This can also be used to get the constant for LA equalities.
-	 */
-	private Rational computeBound(Term laTerm) {
-		final ApplicationTerm varTerm = (ApplicationTerm) ((ApplicationTerm) laTerm).getParameters()[0];
-		final Object[] params = varTerm.getParameters();
-		ConstantTerm boundTerm = null;
-		boolean isNeg = false;
-		if (params.length == 0) {
-			return Rational.ZERO;
-		} else if (params[params.length - 1] instanceof ConstantTerm) {
-			boundTerm = (ConstantTerm) params[params.length - 1];
-		} else if (params[params.length - 1] instanceof ApplicationTerm) {
-			final ApplicationTerm appTerm = ((ApplicationTerm) params[params.length - 1]);
-			if (appTerm.getFunction().getName().equals("-")) {
-				if (appTerm.getParameters()[0] instanceof ConstantTerm) {
-					boundTerm = (ConstantTerm) appTerm.getParameters()[0];
-					isNeg = true;
-				}
-			}
-		}
-		if (boundTerm == null) {
-			return Rational.ZERO;
-		}
-		Rational bound = SMTAffineTerm.create(boundTerm).getConstant();
-		if (!isNeg) {
-			bound = bound.negate();
-		}
-		return bound;
+		assert params[1] instanceof ConstantTerm;
+		assert SMTAffineTerm.create(params[1]).getConstant().equals(Rational.ZERO);
+		return Interpolator.termToAffine(varTerm);
 	}
 
 	/**
 	 * Get the epsilon for this bound constraint. This is 1 for integer constraints, and eps for rational constraints.
 	 */
-	private InfinitNumber computeEpsilon(Term term) {
+	private InfinitNumber computeEpsilon(final Term term) {
 		return mLinVar.isInt() ? InfinitNumber.ONE : InfinitNumber.EPSILON;
 	}
 
 	/**
 	 * Check if a term is negated
 	 */
-	private boolean isNegated(Term term) {
-		if ((term instanceof ApplicationTerm)) {
+	private boolean isNegated(final Term term) {
+		if (term instanceof ApplicationTerm) {
 			return ((ApplicationTerm) term).getFunction().getName().equals("not");
 		} else {
 			return false;

@@ -36,9 +36,8 @@ import de.uni_freiburg.informatik.ultimate.smtinterpol.util.SymmetricPair;
 
 /**
  * The interpolator for congruence-closure theory lemmata.
- * 
- * @author Jochen Hoenicke, Tanja Schindler
  *
+ * @author Jochen Hoenicke, Tanja Schindler
  */
 public class CCInterpolator {
 
@@ -55,7 +54,7 @@ public class CCInterpolator {
 	/**
 	 * Compute the parent partition. This is the next partition, whose subtree includes color.
 	 */
-	private int getParent(int color) {
+	private int getParent(final int color) {
 		int parent = color + 1;
 		while (mInterpolator.mStartOfSubtrees[parent] > color) {
 			parent++;
@@ -67,7 +66,7 @@ public class CCInterpolator {
 	 * Compute the A-local child partition. This is the child, that is A-local to the occurrence. This function returns
 	 * -1 if all children are in B.
 	 */
-	private int getChild(int color, Occurrence occur) {
+	private int getChild(final int color, final Occurrence occur) {
 		/* find A-local child of m_Color */
 		int child = color - 1;
 		while (child >= mInterpolator.mStartOfSubtrees[color]) {
@@ -97,10 +96,10 @@ public class CCInterpolator {
 
 		/*
 		 * max color is the maximum of all firstColor of all literals on the path.
-		 * 
+		 *
 		 * Head color is the lastColor of the first literal before the first path change. If head color >= max color,
 		 * then there is no path change.
-		 * 
+		 *
 		 */
 		boolean mComputed;
 
@@ -132,14 +131,18 @@ public class CCInterpolator {
 			/**
 			 * Close the A path for partition color. This is called when we add a term to the chain that is B-local for
 			 * the current mColor. We set mColor to the parent node. We also close the open path on mColor or open a new
-			 * one and increment mMaxColor if such a path was not yet open.
+			 * one and increment mMaxColor if such a path was not yet open. <<<<<<< HEAD
+			 * 
+			 * =======
+			 *
+			 * >>>>>>> refs/heads/master
 			 * 
 			 * @param other
 			 *            the other PathEnd
 			 * @param boundaryTerm
 			 *            the boundary term for opening/closing the path.
 			 */
-			public void closeSingleAPath(PathEnd other, Term boundaryTerm) {
+			public void closeSingleAPath(final PathEnd other, final Term boundaryTerm) {
 				// this should be empty now, since we anded it with
 				// occur.mInA and the occurrence is not in A for color.
 				assert mHasABPath.isEmpty();
@@ -165,7 +168,7 @@ public class CCInterpolator {
 			 * Open a new A path. This is called when a term is added that is A local in child, where child is a child
 			 * of mColor. We start a new A path on child. If we have still slack, since mHasABPath contains child, we
 			 * don't have to open the path and just set mMaxColor to child.
-			 * 
+			 *
 			 * @param other
 			 *            the other path end.
 			 * @param boundaryTerm
@@ -173,7 +176,8 @@ public class CCInterpolator {
 			 * @param child
 			 *            the child of mColor for which the added term is A local.
 			 */
-			public void openSingleAPath(PathEnd other, Term boundaryTerm, int child) {
+
+			public void openSingleAPath(final PathEnd other, final Term boundaryTerm, final int child) {
 				if (mHasABPath.get(child)) {
 					mMaxColor = other.mColor = mColor = child;
 					// compute all nodes below child excluding child itself
@@ -188,7 +192,7 @@ public class CCInterpolator {
 				}
 			}
 
-			public void closeAPath(PathEnd other, Term boundaryTerm, Occurrence occur) {
+			public void closeAPath(final PathEnd other, final Term boundaryTerm, final Occurrence occur) {
 				assert (other.mColor <= mMaxColor);
 				mHasABPath.and(occur.mInA);
 				while (mColor < mNumInterpolants && occur.isBLocal(mColor)) {
@@ -196,7 +200,8 @@ public class CCInterpolator {
 				}
 			}
 
-			public void openAPath(PathEnd other, Term boundaryTerm, Occurrence occur) {
+			public void openAPath(final PathEnd other, final Term boundaryTerm, final Occurrence occur) {
+
 				while (true) {
 					final int child = getChild(mColor, occur);
 					/* if there is no A-local child, we are done. */
@@ -208,7 +213,7 @@ public class CCInterpolator {
 				}
 			}
 
-			public Term getBoundTerm(int color) {
+			public Term getBoundTerm(final int color) {
 				if (color < mColor) {
 					final Term first = this == mHead ? mPath[0] : mPath[mPath.length - 1];
 					return first;
@@ -220,25 +225,25 @@ public class CCInterpolator {
 				}
 			}
 
-			public void addPre(int color, Term pre) {
+			public void addPre(final int color, final Term pre) {
 				if (mPre[color] == null) {
-					mPre[color] = new HashSet<Term>();
+					mPre[color] = new HashSet<>();
 				}
 				mPre[color].add(pre);
 			}
 
-			public void addAllPre(int color, PathEnd src) {
+			public void addAllPre(final int color, final PathEnd src) {
 				final Set<Term> pre = src.mPre[color];
 				if (pre == null) {
 					return;
 				}
 				if (mPre[color] == null) {
-					mPre[color] = new HashSet<Term>();
+					mPre[color] = new HashSet<>();
 				}
 				mPre[color].addAll(pre);
 			}
 
-			private void mergeCongPath(PathEnd other, ApplicationTerm start, ApplicationTerm end) {
+			private void mergeCongPath(final PathEnd other, final ApplicationTerm start, final ApplicationTerm end) {
 				final FunctionSymbol func = start.getFunction();
 				final int rightColor = mInterpolator.getOccurrence(end, null).getALocalColor();
 				final Occurrence rightOccur = mInterpolator.new Occurrence();
@@ -254,7 +259,7 @@ public class CCInterpolator {
 				final Term[] endArgs = end.getParameters();
 				for (int arg = 0; arg < numArgs; arg++) {
 					argPaths[arg] = startArgs[arg] == endArgs[arg] ? new PathInfo(startArgs[arg])
-							: mPaths.get(new SymmetricPair<Term>(startArgs[arg], endArgs[arg]));
+							: mPaths.get(new SymmetricPair<>(startArgs[arg], endArgs[arg]));
 					argPaths[arg].interpolatePathInfo();
 					isReverse[arg] = (startArgs[arg] != argPaths[arg].mPath[0]);
 					head[arg] = isReverse[arg] ? argPaths[arg].mTail : argPaths[arg].mHead;
@@ -296,8 +301,8 @@ public class CCInterpolator {
 				for (int color = highColor; color < mNumInterpolants; color = getParent(color)) {
 					for (int i = 0; i < numArgs; i++) {
 						if (color < argPaths[i].mMaxColor) {
-							addPre(color,
-									mTheory.not(Coercion.buildEq(head[i].getBoundTerm(color), tail[i].getBoundTerm(color))));
+							addPre(color, mTheory
+									.not(Coercion.buildEq(head[i].getBoundTerm(color), tail[i].getBoundTerm(color))));
 						}
 						addAllPre(color, head[i]);
 						addAllPre(color, tail[i]);
@@ -336,23 +341,19 @@ public class CCInterpolator {
 		 * [m_HeadColor, numInterpolants] HeadColor is in between first and last color of head term. likewise for Tail.
 		 * MaxColor is maximum of all first of all terms and literals involved in current path (but there may be bigger
 		 * literals in congruence paths that were added to headPre/tailPre).
-		 * 
-		 * The partial interpolant of the current path is m_Interpolants && HeadPre ==> Lits[0] == m_HeadTerm && TailPre
-		 * ==> m_TailTerm == lits[n] where HeadTerm = Lits[0] for partitions < HeadColor and TailTerm = Lits[n] for
-		 * partitions < TailColor.
 		 *
 		 * For partitions >= maxColor, everything so far was in A, so the partial interpolant of the current path is
 		 * m_Interpolants && TailPre ==> Lits[0] == lits[n]
 		 */
 
-		public PathInfo(Term[] path) {
+		public PathInfo(final Term[] path) {
 			mPath = path;
 			mHasABPath = new BitSet(mNumInterpolants);
 			mHasABPath.set(0, mNumInterpolants);
 			mMaxColor = mNumInterpolants;
 		}
 
-		public PathInfo(Term arg) {
+		public PathInfo(final Term arg) {
 			this(new Term[] { arg });
 		}
 
@@ -370,7 +371,7 @@ public class CCInterpolator {
 			for (int i = 0; i < mPath.length - 1; i++) {
 				final Term left = mPath[i];
 				final Term right = mPath[i + 1];
-				final ApplicationTerm lit = mEqualities.get(new SymmetricPair<Term>(left, right));
+				final ApplicationTerm lit = mEqualities.get(new SymmetricPair<>(left, right));
 				if (lit == null) {
 					mTail.mergeCongPath(mHead, (ApplicationTerm) left, (ApplicationTerm) right);
 				} else {
@@ -405,7 +406,7 @@ public class CCInterpolator {
 		 * @param isNegated
 		 *            True, if there is a disequality in the chain.
 		 */
-		private void addInterpolantClause(int color, Set<Term> pre) {
+		private void addInterpolantClause(final int color, final Set<Term> pre) {
 			final Term clause = pre == null ? mTheory.mFalse : mTheory.or(pre.toArray(new Term[pre.size()]));
 			mInterpolants[color].add(clause);
 		}
@@ -417,7 +418,7 @@ public class CCInterpolator {
 
 		}
 
-		public void addDiseq(ApplicationTerm diseq) {
+		public void addDiseq(final ApplicationTerm diseq) {
 			final LitInfo info = mInterpolator.getLiteralInfo(diseq);
 			Term boundaryTailTerm, boundaryHeadTerm;
 			boundaryHeadTerm = mPath[0];
@@ -451,8 +452,8 @@ public class CCInterpolator {
 					mHead.addAllPre(mHead.mColor, mTail);
 					mTail.mPre[mTail.mColor] = null;
 					if (mHead.mColor < mMaxColor) {
-						mHead.addPre(mHead.mColor, mTheory.not(Coercion.buildEq(mHead.getBoundTerm(mHead.mColor),
-								mTail.getBoundTerm(mHead.mColor))));
+						mHead.addPre(mHead.mColor, mTheory.not(
+								Coercion.buildEq(mHead.getBoundTerm(mHead.mColor), mTail.getBoundTerm(mHead.mColor))));
 					}
 					addInterpolantClause(mHead.mColor, mHead.mPre[mHead.mColor]);
 					mHead.mColor = mTail.mColor = getParent(mHead.mColor);
@@ -467,25 +468,25 @@ public class CCInterpolator {
 	}
 
 	@SuppressWarnings("unchecked")
-	public CCInterpolator(Interpolator ipolator) {
+	public CCInterpolator(final Interpolator ipolator) {
 		mInterpolator = ipolator;
 		mNumInterpolants = ipolator.mNumInterpolants;
 		mTheory = ipolator.mTheory;
-		mPaths = new HashMap<SymmetricPair<Term>, PathInfo>();
+		mPaths = new HashMap<>();
 		mInterpolants = new Set[mNumInterpolants];
 		for (int i = 0; i < mNumInterpolants; i++) {
-			mInterpolants[i] = new HashSet<Term>();
+			mInterpolants[i] = new HashSet<>();
 		}
 	}
 
-	public Term[] computeInterpolants(Term proofTerm) {
-		mEqualities = new HashMap<SymmetricPair<Term>, ApplicationTerm>();
+	public Term[] computeInterpolants(final Term proofTerm) {
+		mEqualities = new HashMap<>();
 		final InterpolatorClauseTermInfo proofTermInfo = mInterpolator.getClauseTermInfo(proofTerm);
 		for (final Term literal : proofTermInfo.getLiterals()) {
 			final InterpolatorLiteralTermInfo litTermInfo = mInterpolator.getLiteralTermInfo(literal);
 			if (litTermInfo.isNegated()) {
 				final ApplicationTerm eq = (ApplicationTerm) litTermInfo.getAtom();
-				mEqualities.put(new SymmetricPair<Term>(eq.getParameters()[0], eq.getParameters()[1]), eq);
+				mEqualities.put(new SymmetricPair<>(eq.getParameters()[0], eq.getParameters()[1]), eq);
 			}
 		}
 
@@ -496,7 +497,7 @@ public class CCInterpolator {
 			final Term first = path[0];
 			final Term last = path[path.length - 1];
 			final PathInfo pathInfo = new PathInfo(path);
-			mPaths.put(new SymmetricPair<Term>(first, last), pathInfo);
+			mPaths.put(new SymmetricPair<>(first, last), pathInfo);
 			if (i == 0) {
 				mainPath = pathInfo;
 			}

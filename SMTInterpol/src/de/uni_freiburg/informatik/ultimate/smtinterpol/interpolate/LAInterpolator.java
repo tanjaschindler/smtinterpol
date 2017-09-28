@@ -30,16 +30,15 @@ import de.uni_freiburg.informatik.ultimate.smtinterpol.theory.linar.InfinitNumbe
 
 /**
  * The Interpolator for linear arithmetic. This computes the interpolants with the algorithm described in "Proof Tree
- * Preserving Interpolation" in the version "newtechreport.pdf" in this repository.
+ * Preserving Interpolation" in the version "newtechreport.pdf" in this repository. In particular we need to compute
+ * leaf interpolants for trichotomy
  *
- * In particular we need to compute leaf interpolants for trichotomy
- * 
  * <pre>
  * a < b \/ a == b \/ a > b
  * </pre>
- * 
+ *
  * and for simple conflicts with Farkas coefficients.
- * 
+ *
  * @author Jochen Hoenicke, Alexander Nutz, Tanja Schindler
  */
 public class LAInterpolator {
@@ -66,7 +65,7 @@ public class LAInterpolator {
 
 	/**
 	 * Return the epsilon. This is 1 for integer constraints, eps for rational constraints.
-	 * 
+	 *
 	 * @return the epsilon.
 	 */
 	public InfinitNumber getEpsilon() {
@@ -74,14 +73,18 @@ public class LAInterpolator {
 	}
 
 	/**
-	 * Create a new linear arithmetic interpolator for an LA lemma.
+	 * Create a new linear arithmetic interpolator for an LA lemma. <<<<<<< HEAD
+	 * 
+	 * =======
+	 *
+	 * >>>>>>> refs/heads/master
 	 * 
 	 * @param interpolator
 	 *            the global interpolator.
 	 * @param laLemma
 	 *            the lemma that is interpolated.
 	 */
-	public LAInterpolator(Interpolator interpolator) {
+	public LAInterpolator(final Interpolator interpolator) {
 		mInterpolator = interpolator;
 		mInterpolants = new Interpolant[mInterpolator.mNumInterpolants];
 		for (int i = 0; i < mInterpolator.mNumInterpolants; i++) {
@@ -90,24 +93,20 @@ public class LAInterpolator {
 	}
 
 	/**
-	 * Interpolate an LA lemma.
-	 * 
-	 * Normally, the interpolant is computed by summing up the A-part of all literals minding the Farkas coefficients.
-	 * 
-	 * For trichotomy clauses we have to return the special trichotomy interpolant,
-	 * 
+	 * Interpolate an LA lemma. Normally, the interpolant is computed by summing up the A-part of all literals minding
+	 * the Farkas coefficients. For trichotomy clauses we have to return the special trichotomy interpolant,
+	 *
 	 * <pre>
 	 * LA(x1 + x2 &lt= 0, 0, x1 + x2 &lt= 0 and
 	 *         (x1 + x2 &lt 0 or EQ(x, x1)))
 	 * </pre>
-	 * 
+	 *
 	 * in the mixed case.
 	 *
 	 * @param lemma
 	 *            the LA lemma that is interpolated.
 	 */
-	private void interpolateLemma(Term lemma) {
-
+	private void interpolateLemma(final Term lemma) {
 		final InterpolatorAffineTerm[] ipl = new InterpolatorAffineTerm[mInterpolator.mNumInterpolants + 1];
 		for (int part = 0; part < ipl.length; part++) {
 			ipl[part] = new InterpolatorAffineTerm();
@@ -132,7 +131,7 @@ public class LAInterpolator {
 			final Term lit = mInterpolator.mTheory.not(entry.getKey());
 			final InterpolatorLiteralTermInfo litTermInfo = mInterpolator.getLiteralTermInfo(lit);
 			final Rational factor = entry.getValue();
-			if (litTermInfo.isBoundConstraint() || (!litTermInfo.isNegated() && litTermInfo.isLAEquality())) {
+			if (litTermInfo.isBoundConstraint() || !litTermInfo.isNegated() && litTermInfo.isLAEquality()) {
 				InfinitNumber bound;
 				InterpolatorAffineTerm lv;
 				if (litTermInfo.isBoundConstraint()) {
@@ -159,12 +158,12 @@ public class LAInterpolator {
 				while (part < ipl.length) {
 					if (info.isMixed(part)) {
 						/* ab-mixed interpolation */
-						assert (info.mMixedVar != null);
+						assert info.mMixedVar != null;
 						ipl[part].add(factor, info.getAPart(part));
 						ipl[part].add(factor.negate(), info.mMixedVar);
 
 						if (auxVars[part] == null) {
-							auxVars[part] = new ArrayList<TermVariable>();
+							auxVars[part] = new ArrayList<>();
 						}
 						auxVars[part].add(info.mMixedVar);
 					}
@@ -193,9 +192,11 @@ public class LAInterpolator {
 					}
 					part++;
 				}
+			} else {
+				assert false;
 			}
 		}
-		assert (ipl[ipl.length - 1].isConstant() && InfinitNumber.ZERO.less(ipl[ipl.length - 1].getConstant()));
+		assert ipl[ipl.length - 1].isConstant() && InfinitNumber.ZERO.less(ipl[ipl.length - 1].getConstant());
 
 		/*
 		 * Save the interpolants computed for this leaf into the result array.
@@ -242,7 +243,7 @@ public class LAInterpolator {
 				final LATerm laTerm = new LATerm(ipl[part], k, F);
 				mInterpolants[part].mTerm = laTerm;
 			} else {
-				assert (equalityInfo == null || !equalityInfo.isMixed(part));
+				assert equalityInfo == null || !equalityInfo.isMixed(part);
 				if (equalityInfo != null && ipl[part].isConstant()
 						&& equalityInfo.isALocal(part) != inequalityInfo.isALocal(part)) {
 					/*
@@ -261,10 +262,10 @@ public class LAInterpolator {
 
 	/**
 	 * Computes partial interpolants for the LA lemma.
-	 * 
+	 *
 	 * @return an array containing the partial tree interpolants.
 	 */
-	public Interpolant[] computeInterpolants(Term lemma) {
+	public Interpolant[] computeInterpolants(final Term lemma) {
 		interpolateLemma(lemma);
 		return mInterpolants;
 	}
