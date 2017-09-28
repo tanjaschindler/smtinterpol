@@ -281,8 +281,13 @@ public class Interpolator extends NonRecursive {
 					interpolants[j] = new Interpolant(interpolantTerms[j]);
 				}
 			} else if (leafTermInfo.getLemmaType().equals(":LA") || leafTermInfo.getLemmaType().equals(":trichotomy")) {
-				final LAInterpolator ipolator = new LAInterpolator(this);
-				interpolants = ipolator.computeInterpolants(leaf);
+				if (Config.CR_LRA_INTERPOLANTS && leafTermInfo.getLemmaType().equals(":LA") && mTheory.getLogic().name().equals("QF_LRA")) {
+					final LRAInterpolatorWithCR ipolator = new LRAInterpolatorWithCR(this);
+					interpolants = ipolator.computeInterpolants(leaf);
+				} else {
+					final LAInterpolator ipolator = new LAInterpolator(this);
+					interpolants = ipolator.computeInterpolants(leaf);
+				}
 			} else if (leafTermInfo.getLemmaType().equals(":read-over-weakeq")
 					|| leafTermInfo.getLemmaType().equals(":weakeq-ext")) {
 				final ArrayInterpolator ipolator = new ArrayInterpolator(this);
